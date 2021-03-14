@@ -17,10 +17,9 @@ clean:
 
 test: $(prom)
 	for t in $(tests); do \
-		echo In Test $$t >&2; \
 		./$(prom) $(test_dir)/$$t.in $(test_dir)/$$t.test 2>&1; \
 		diff -q $(test_dir)/$$t.out $(test_dir)/$$t.test > /dev/null || \
-			echo Test $$t failed >&2; \
+			(echo Test $$t failed && exit 1) \
 	done
 # %.test:  $(prom) %.in %.out
 # 	./$(prom) $(test_dir)/$< $(test_dir)/$(word 2, $?) | diff -q $(word 2, $?) -> /dev/null || \

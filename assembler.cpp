@@ -1,3 +1,4 @@
+#include <bitset>
 #include <iostream>
 #include <algorithm>
 #include <bitset>
@@ -8,7 +9,7 @@
 #include <fstream>
 using namespace std;
 
-// #define DEBUG
+#define DEBUG
 
 class Scanner
 {
@@ -19,6 +20,7 @@ public:
     void get_assembly(istream &in);
     void remove_comments();
     void split_data_and_text();
+    void preprocess_text();
     vector<string> &get_data_seg();
     vector<string> &get_text_seg();
     void scan(istream &in);
@@ -29,6 +31,7 @@ void Scanner::scan(istream &in)
     get_assembly(in);
     remove_comments();
     split_data_and_text();
+    preprocess_text();
 }
 vector<string> &Scanner::get_data_seg()
 {
@@ -55,7 +58,6 @@ void Scanner::remove_comments()
                 s.erase(i, s.size());
     }
 }
-
 void Scanner::split_data_and_text()
 {
     /*
@@ -96,7 +98,27 @@ void Scanner::split_data_and_text()
         }
     }
 }
-
+void Scanner::preprocess_text()
+{
+    vector<string> new_text_seg;
+    string s;
+    for (size_t i = 0; i < text_seg.size(); i++)
+    {
+        s = text_seg[i];
+        if (s.find(':') != string::npos)
+        {
+            s = text_seg[i].substr(0, s.find(':') + 1);
+            s += text_seg.at(i + 1);
+            new_text_seg.push_back(s);
+            ++i;
+        }
+        else
+        {
+            new_text_seg.push_back(s);
+        }
+    }
+    text_seg = new_text_seg;
+}
 class Parser
 {
 public:
@@ -122,9 +144,9 @@ public:
     string get_next_token();
     string get_register_code(const string &r);
     int get_op_type(const string &op);
-    string sign_extent(const string &s, const size_t target);
     string zero_extent(const string &s, const size_t target);
     void process_dataseg();
+    void find_label();
     void parse();
     void print_machine_code(ostream &out);
     Parser(vector<string> &in_data_seg, vector<string> &in_text_seg, uint32_t init_pc) : data_seg(in_data_seg), text_seg(in_text_seg), pc(init_pc) {}
@@ -133,15 +155,38 @@ public:
 string Parser::get_next_token()
 {
     string s = *cur_string;
-    while (cur_string_idx < s.size() && s[cur_string_idx] == ' ')
-        ++cur_string_idx;
-    size_t end_idx = s.find(',', cur_string_idx);
-    string res = s.substr(cur_string_idx, end_idx - cur_string_idx);
-    cur_string_idx = end_idx + 1;
+    size_t st_idx = s.find_first_not_of(' ', cur_string_idx);
+    size_t end_idx = s.find(' ', st_idx);
+    string res = s.substr(st_idx, end_idx - st_idx);
+    cur_string_idx = end_idx;
     return res;
 }
 void Parser::process_dataseg()
 {
+}
+void Parser::find_label()
+{
+    uint32_t label_pc = pc;
+    for (string &s : text_seg)
+    {
+        size_t i = s.find(':') == string::npos ? 0 : s.find(':');
+        if (i)
+        {
+            // locate label
+            size_t st = 0;
+            while (st < s.size() && s[st] == ' ')
+                ++st;
+            string label = s.substr(st, i - st);
+            label_to_addr[label] = label_pc;
+        }
+        label_pc += 4;
+    }
+#ifdef DEBUG
+    // for (auto &it : label_to_addr)
+    // {
+    //     cout << it.first << " " << it.second << endl;
+    // }
+#endif
 }
 void Parser::print_machine_code(ostream &out)
 {
@@ -241,74 +286,53 @@ int Parser::get_op_type(const string &op)
     else
         return P_type;
 }
-string Parser::sign_extent(const string &s, const size_t target)
-{
-    string res;
-    int32_t num = stoi(s);
-    bool is_positive;
-    num ? is_positive = 1 : 0;
-    while (num)
-    {
-        res.push_back((num & 1) + '0');
-        num >>= 1;
-    }
-    while (res.size() < target)
-    {
-        if (is_positive)
-            res.push_back('0');
-        else
-            res.push_back('1');
-    }
-    if (res.size() > target)
-    {
-        // overflow
-        res = res.substr(0, target);
-    }
-    reverse(res.begin(), res.end());
-    return res;
-}
-
 string Parser::zero_extent(const string &s, const size_t target)
 {
     /*
     convert string in decimal to string in binary and add zero to its head
+    e.g. "4" -> "0"*(target-3)+"100"
     */
     string res;
     int32_t num = stoi(s);
-    while (num)
+    switch (target)
     {
-        res.push_back((num & 1) + '0');
-        num >>= 1;
+    case 5:
+        res = bitset<5>(num).to_string();
+        break;
+    case 16:
+        res = bitset<16>(num).to_string();
+        break;
+    case 26:
+        res = bitset<26>(num).to_string();
+        break;
+    default:
+        break;
     }
-    while (res.size() < target)
-    {
-        res.push_back('0');
-    }
-    reverse(res.begin(), res.end());
     return res;
 }
 void Parser::parse()
 {
     process_dataseg();
-    // process text seg
+    find_label();
+    // #ifdef DEBUG
+    //     for (string &s : text_seg)
+    //         cout << s << endl;
+    //     cout << endl
+    //          << endl;
+    // #endif
     for (string &s : text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
-        if (i)
-        {
-            // locate label
-            size_t st = 0;
-            while (st < s.size() && s[st] == ' ')
-                ++st;
-            string label = s.substr(st, i - st);
-            label_to_addr[label] = pc;
-        }
         cur_string = &s;
-        for (i; i < s.size(); i++)
+        for (; i < s.size(); i++)
         {
             if (s[i] == ' ')
                 continue;
             string op = s.substr(i, s.find(' ', i) - i);
+#ifdef DEBUG
+            if (op == "xor" || op == "or")
+                cout << s << endl;
+#endif
             cur_string_idx = s.find(' ', i);
             switch (get_op_type(op))
             {
@@ -511,7 +535,11 @@ string Parser::get_R_instruction(const string &op)
         else
             ;
     }
-    string machine_code = opCode + dReg + sReg + tReg + shAmt + func;
+    string machine_code = opCode + sReg + tReg + dReg + shAmt + func;
+#ifdef DEBUG
+    if (machine_code == "00000000100001011100000000100101")
+        cout << op << endl;
+#endif
     return machine_code;
 }
 
@@ -542,7 +570,7 @@ string Parser::get_I_instruction(const string &op)
         addr = label_to_addr[temp];
         addr = (addr - (pc + 4)) / 4;
         temp = to_string(addr);
-        imme = sign_extent(temp, 16);
+        imme = zero_extent(temp, 16);
 
         if (op == "beq")
             opCode = "000100";
@@ -558,16 +586,13 @@ string Parser::get_I_instruction(const string &op)
     {
         temp = get_next_token();
         tReg = get_register_code(temp);
-#ifdef DEBUG
-        cout << temp << " " << tReg << endl;
-#endif
         temp = get_next_token();
         sReg = get_register_code(temp);
 
         temp = get_next_token();
 
         if (op == "addi" || op == "slti" || op == "sltiu" || op == "addiu")
-            imme = sign_extent(temp, 16);
+            imme = zero_extent(temp, 16);
         else
             imme = zero_extent(temp, 16);
 
@@ -596,11 +621,12 @@ string Parser::get_I_instruction(const string &op)
         temp = get_next_token();
         tReg = get_register_code(temp);
 
+        // imme(rs)
         temp = get_next_token();
-        // sr_imme = temp.split(QRegExp("[()]"));
-
-        // imme = sign_extent(sr_imme.at(0), 16);
-        // sReg = get_register_code(sr_imme.at(1));
+        imme = temp.substr(0, temp.find('('));
+        imme = zero_extent(imme, 16);
+        sReg = temp.substr(temp.find('(') + 1, temp.find(')') - temp.find('(') - 1);
+        sReg = get_register_code(sReg);
 
         if (op == "lw")
             opCode = "100011";
@@ -631,7 +657,7 @@ string Parser::get_I_instruction(const string &op)
         sReg = "00000";
 
         temp = get_next_token();
-        imme = sign_extent(temp, 16);
+        imme = zero_extent(temp, 16);
 
         opCode = "001111";
     }
@@ -644,9 +670,15 @@ string Parser::get_I_instruction(const string &op)
 
         temp = get_next_token();
         addr = label_to_addr[temp];
-        addr = (addr - (pc + 4)) / 4;
-        temp = to_string(addr);
-        imme = sign_extent(temp, 16);
+        addr = (addr - (pc + 4)) / 4; // compute offset
+#ifdef DEBUG
+        // if (op == "blez")
+        // {
+        //     cout << pc << " " << addr << endl;
+        //     cout << temp << " : " << hex << addr << endl;
+        // }
+#endif
+        imme = zero_extent(to_string(addr), 16);
 
         if (op == "bgez")
         {
@@ -700,7 +732,7 @@ string Parser::get_J_instruction(const string &op)
     addr = label_to_addr[target];
     addr >>= 2;
     target = to_string(addr);
-    target = sign_extent(target, 26);
+    target = zero_extent(target, 26);
 
     string machine_code = opCode + target;
     return machine_code;
