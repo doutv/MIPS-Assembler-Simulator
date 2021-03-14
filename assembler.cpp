@@ -8,6 +8,8 @@
 #include <fstream>
 using namespace std;
 
+// #define DEBUG
+
 class Scanner
 {
 public:
@@ -133,7 +135,7 @@ string Parser::get_next_token()
     string s = *cur_string;
     while (cur_string_idx < s.size() && s[cur_string_idx] == ' ')
         ++cur_string_idx;
-    size_t end_idx = s.find(' ', cur_string_idx);
+    size_t end_idx = s.find(',', cur_string_idx);
     string res = s.substr(cur_string_idx, end_idx - cur_string_idx);
     cur_string_idx = end_idx + 1;
     return res;
@@ -322,8 +324,6 @@ void Parser::parse()
             default:
                 break;
             }
-            if (output.size() > 0)
-                cout << output.back() << endl;
         }
         pc += 4;
     }
@@ -558,7 +558,9 @@ string Parser::get_I_instruction(const string &op)
     {
         temp = get_next_token();
         tReg = get_register_code(temp);
-
+#ifdef DEBUG
+        cout << temp << " " << tReg << endl;
+#endif
         temp = get_next_token();
         sReg = get_register_code(temp);
 
@@ -725,9 +727,7 @@ int main(int argc, char *argv[])
         }
         scanner.scan(filein);
         parser.parse();
-        for (string &s : parser.output)
-            cout << s << endl;
-        // parser.print_machine_code(cout);
+        parser.print_machine_code(cout);
     }
     else if (argc == 3)
     {

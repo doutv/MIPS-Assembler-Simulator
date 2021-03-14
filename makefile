@@ -17,8 +17,9 @@ clean:
 
 test: $(prom)
 	for t in $(tests); do \
-		./$(prom) $(test_dir)/$$t.in $(test_dir)/$$t.test; \
-		diff $(test_dir)/$$t.out $(test_dir)/$$t.test > /dev/null || \
+		echo In Test $$t >&2; \
+		./$(prom) $(test_dir)/$$t.in $(test_dir)/$$t.test 2>&1; \
+		diff -q $(test_dir)/$$t.out $(test_dir)/$$t.test > /dev/null || \
 			echo Test $$t failed >&2; \
 	done
 # %.test:  $(prom) %.in %.out
