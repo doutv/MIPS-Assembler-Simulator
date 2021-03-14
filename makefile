@@ -12,11 +12,12 @@ $(prom): $(prom).cpp
 	g++ $(prom).cpp -o $(prom)
 
 clean:
-	rm $(prom) sample.test
+	rm $(prom)
+	rm $(test_dir)/*.test
 
 test: $(prom)
 	for t in $(tests); do \
-		$(prom) $(test_dir)/$$t.in $(test_dir)/$$t.test; \
+		./$(prom) $(test_dir)/$$t.in $(test_dir)/$$t.test; \
 		diff $(test_dir)/$$t.out $(test_dir)/$$t.test > /dev/null || \
 			echo Test $$t failed >&2; \
 	done
