@@ -5,6 +5,7 @@
 #include <cstring>
 #include <vector>
 #include <unordered_map>
+#include <fstream>
 using namespace std;
 
 class Scanner
@@ -13,16 +14,17 @@ public:
     vector<string> file;
     vector<string> data_seg;
     vector<string> text_seg;
-    void get_assembly();
+    void get_assembly(istream &in);
     void remove_comments();
     void split_data_and_text();
     vector<string> &get_data_seg();
     vector<string> &get_text_seg();
-    Scanner();
+    void scan(istream &in);
+    Scanner(){};
 };
-Scanner::Scanner()
+void Scanner::scan(istream &in)
 {
-    get_assembly();
+    get_assembly(in);
     remove_comments();
     split_data_and_text();
 }
@@ -34,10 +36,10 @@ vector<string> &Scanner::get_text_seg()
 {
     return text_seg;
 }
-void Scanner::get_assembly()
+void Scanner::get_assembly(istream &in)
 {
     string s;
-    while (getline(cin, s))
+    while (getline(in, s))
         file.push_back(s);
 }
 void Scanner::remove_comments()
@@ -45,16 +47,10 @@ void Scanner::remove_comments()
     for (string &s : file)
     {
         if (s.empty())
-        {
             continue;
-        }
         for (size_t i = 0; i < s.size(); i++)
-        {
             if (s[i] == '#')
-            {
                 s.erase(i, s.size());
-            }
-        }
     }
 }
 
@@ -72,25 +68,29 @@ void Scanner::split_data_and_text()
             continue;
         if (s.find(".text") != string::npos)
         {
-            for (size_t j = i + 1; j < file.size(); j++)
+            size_t j;
+            for (j = i + 1; j < file.size(); j++)
             {
                 s = file[j];
-                if (s.find(":") != string::npos)
+                if (s.find(".data") != string::npos)
                     break;
                 text_seg.push_back(s);
             }
-            break;
+            i = j - 1;
+            continue;
         }
         if (s.find(".data") != string::npos)
         {
+            size_t j;
             for (size_t j = i + 1; j < file.size(); j++)
             {
                 s = file[j];
-                if (s.find(":") != string::npos)
+                if (s.find(".text") != string::npos)
                     break;
                 data_seg.push_back(s);
             }
-            break;
+            i = j - 1;
+            continue;
         }
     }
 }
@@ -124,7 +124,7 @@ public:
     string zero_extent(const string &s, const size_t target);
     void process_dataseg();
     void parse();
-    void print_machine_code();
+    void print_machine_code(ostream &out);
     Parser(vector<string> &in_data_seg, vector<string> &in_text_seg, uint32_t init_pc) : data_seg(in_data_seg), text_seg(in_text_seg), pc(init_pc) {}
 };
 
@@ -133,13 +133,18 @@ string Parser::get_next_token()
     string s = *cur_string;
     while (cur_string_idx < s.size() && s[cur_string_idx] == ' ')
         ++cur_string_idx;
-    return s.substr(cur_string_idx, s.find(' ', cur_string_idx) - cur_string_idx);
+    size_t end_idx = s.find(' ', cur_string_idx);
+    string res = s.substr(cur_string_idx, end_idx - cur_string_idx);
+    cur_string_idx = end_idx + 1;
+    return res;
 }
 void Parser::process_dataseg()
 {
 }
-void Parser::print_machine_code()
+void Parser::print_machine_code(ostream &out)
 {
+    for (string &s : output)
+        out << s << endl;
 }
 string Parser::get_register_code(const string &r)
 {
@@ -260,11 +265,12 @@ string Parser::sign_extent(const string &s, const size_t target)
     reverse(res.begin(), res.end());
     return res;
 }
-/*
-    convert string in decimal to string in binary and add zero to its head
-    */
+
 string Parser::zero_extent(const string &s, const size_t target)
 {
+    /*
+    convert string in decimal to string in binary and add zero to its head
+    */
     string res;
     int32_t num = stoi(s);
     while (num)
@@ -316,6 +322,8 @@ void Parser::parse()
             default:
                 break;
             }
+            if (output.size() > 0)
+                cout << output.back() << endl;
         }
         pc += 4;
     }
@@ -455,7 +463,6 @@ string Parser::get_R_instruction(const string &op)
         dReg = get_register_code(temp);
         temp = get_next_token();
         tReg = get_register_code(temp);
-
         shAmt = get_next_token();
         shAmt = zero_extent(shAmt, 5);
 
@@ -697,11 +704,49 @@ string Parser::get_J_instruction(const string &op)
     return machine_code;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
     Scanner scanner;
     uint32_t init_pc = 0x400000;
     Parser parser(scanner.get_data_seg(), scanner.get_text_seg(), init_pc);
+    if (argc == 1)
+    {
+        scanner.scan(cin);
+        parser.parse();
+        parser.print_machine_code(cout);
+    }
+    else if (argc == 2)
+    {
+        ifstream filein(argv[1]);
+        if (!filein.is_open())
+        {
+            cout << argv[1] << "can not open" << endl;
+            return 0;
+        }
+        scanner.scan(filein);
+        parser.parse();
+        for (string &s : parser.output)
+            cout << s << endl;
+        // parser.print_machine_code(cout);
+    }
+    else if (argc == 3)
+    {
+        ifstream filein(argv[1]);
+        ofstream fileout(argv[2]);
+        if (!filein.is_open())
+        {
+            cout << argv[1] << "can not open" << endl;
+            return 0;
+        }
+        if (!fileout.is_open())
+        {
+            cout << argv[2] << "can not open" << endl;
+            return 0;
+        }
+        scanner.scan(filein);
+        parser.parse();
+        parser.print_machine_code(fileout);
+    }
 
     return 0;
 }
