@@ -68,6 +68,7 @@ void Scanner::split_data_and_text()
     for (i = 0; i < file.size(); i++)
     {
         string s = file[i];
+        // remove empty lines
         if (s.empty())
             continue;
         if (s.find(".text") != string::npos)
@@ -100,6 +101,11 @@ void Scanner::split_data_and_text()
 }
 void Scanner::preprocess_text()
 {
+    /*
+    将 label 和指令放在同一行
+    将 ',' 替换成空格' '
+    去除 \t tab
+    */
     vector<string> new_text_seg;
     string s;
     for (size_t i = 0; i < text_seg.size(); i++)
@@ -116,6 +122,11 @@ void Scanner::preprocess_text()
         {
             new_text_seg.push_back(s);
         }
+    }
+    for (string &s : new_text_seg)
+    {
+        replace(s.begin(), s.end(), ',', ' ');
+        s.erase(remove(s.begin(), s.end(), '\t'), s.end());
     }
     text_seg = new_text_seg;
 }
@@ -156,7 +167,7 @@ string Parser::get_next_token()
 {
     string s = *cur_string;
     size_t st_idx = s.find_first_not_of(' ', cur_string_idx);
-    size_t end_idx = s.find(' ', st_idx);
+    size_t end_idx = s.find(' ', st_idx) == string::npos ? s.size() : s.find(' ', st_idx);
     string res = s.substr(st_idx, end_idx - st_idx);
     cur_string_idx = end_idx;
     return res;
@@ -227,7 +238,6 @@ string Parser::get_register_code(const string &r)
         return "01110";
     if (r == "$15" || r == "$t7")
         return "01111";
-
     if (r == "$16" || r == "$s0")
         return "10000";
     if (r == "$17" || r == "$s1")
@@ -324,30 +334,26 @@ void Parser::parse()
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
         cur_string = &s;
-        for (; i < s.size(); i++)
+        i = s.find_first_not_of(' ', i);
+        string op = s.substr(i, s.find(' ', i) - i);
+        // #ifdef DEBUG
+        //         if (op == "xor" || op == "or")
+        //             cout << s << endl;
+        // #endif
+        cur_string_idx = s.find(' ', i);
+        switch (get_op_type(op))
         {
-            if (s[i] == ' ')
-                continue;
-            string op = s.substr(i, s.find(' ', i) - i);
-#ifdef DEBUG
-            if (op == "xor" || op == "or")
-                cout << s << endl;
-#endif
-            cur_string_idx = s.find(' ', i);
-            switch (get_op_type(op))
-            {
-            case R_type:
-                output.push_back(get_R_instruction(op));
-                break;
-            case I_type:
-                output.push_back(get_I_instruction(op));
-                break;
-            case J_type:
-                output.push_back(get_J_instruction(op));
-                break;
-            default:
-                break;
-            }
+        case R_type:
+            output.push_back(get_R_instruction(op));
+            break;
+        case I_type:
+            output.push_back(get_I_instruction(op));
+            break;
+        case J_type:
+            output.push_back(get_J_instruction(op));
+            break;
+        default:
+            break;
         }
         pc += 4;
     }
