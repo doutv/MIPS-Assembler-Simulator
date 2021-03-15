@@ -1,3 +1,4 @@
 *.test
 assembler
 simulator
+*.t*
