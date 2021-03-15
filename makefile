@@ -21,7 +21,7 @@ asm_test: $(PROM)
 	for t in $(ASM_TESTS); do \
 		./$(PROM) $(TEST_DIR)/$$t.asm $(TEST_DIR)/$$t.tasmout 2>&1 | \
 		diff -q $(TEST_DIR)/$$t.asmout $(TEST_DIR)/$$t.tasmout > /dev/null || \
-			(echo "Test $$t failed" && exit 1); \
+			echo "Test $$t failed" && exit 1; \
 	done
 	echo -e "All assembler tests passed!\n"
 
@@ -30,6 +30,6 @@ sim_test: $(PROM)
 	for t in $(SIM_TESTS); do \
 		./$(PROM) $(TEST_DIR)/$$t.asm $(TEST_DIR)/$$t.in $(TEST_DIR)/$$t.tsimout 2>&1 | \
 		diff -q $(TEST_DIR)/$$t.out $(TEST_DIR)/$$t.tsimout > /dev/null || \
-			(echo "Test $$t failed" && exit 1); \
+			echo "Test $$t failed" && exit 1; \
 	done
 	echo -e "All simulator tests passed!\n"
