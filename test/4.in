@@ -1,3 +1,4 @@
+.text
 A: # comment
 addi $t0, $t0, 0
 addi $t0, $t0, 0
