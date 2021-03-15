@@ -417,25 +417,25 @@ string Parser::get_R_instruction(const string &op)
         add $rd, $rs, $rt
         Therefore, for add $t0, $t1, $t2, we have:
         000000 01001 01010 01000 00000 100000
-        */
-    string opCode, dReg, sReg, tReg, shAmt, func;
+    */
+    string opcode, rd, rs, rt, shamt, func;
     string temp;
-    opCode = "000000";
+    opcode = "000000";
     // op rd rs rt
     if (op == "add" || op == "addu" || op == "sub" || op == "subu" ||
         op == "and" || op == "or" || op == "xor" || op == "nor" ||
         op == "slt" || op == "sltu")
     {
         temp = get_next_token();
-        dReg = get_register_code(temp);
+        rd = get_register_code(temp);
 
         temp = get_next_token();
-        sReg = get_register_code(temp);
+        rs = get_register_code(temp);
 
         temp = get_next_token();
-        tReg = get_register_code(temp);
+        rt = get_register_code(temp);
 
-        shAmt = "00000";
+        shamt = "00000";
 
         if (op == "add")
             func = "100000";
@@ -465,15 +465,15 @@ string Parser::get_R_instruction(const string &op)
     else if (op == "sllv" || op == "srlv" || op == "srav")
     {
         temp = get_next_token();
-        dReg = get_register_code(temp);
+        rd = get_register_code(temp);
 
         temp = get_next_token();
-        tReg = get_register_code(temp);
+        rt = get_register_code(temp);
 
         temp = get_next_token();
-        sReg = get_register_code(temp);
+        rs = get_register_code(temp);
 
-        shAmt = "00000";
+        shamt = "00000";
 
         if (op == "sllv")
             func = "000100";
@@ -489,14 +489,14 @@ string Parser::get_R_instruction(const string &op)
     else if (op == "mult" || op == "multu" || op == "div" || op == "divu")
     {
         temp = get_next_token();
-        sReg = get_register_code(temp);
+        rs = get_register_code(temp);
 
         temp = get_next_token();
-        tReg = get_register_code(temp);
+        rt = get_register_code(temp);
 
-        dReg = "00000";
+        rd = "00000";
 
-        shAmt = "00000";
+        shamt = "00000";
 
         if (op == "mult")
             func = "011000";
@@ -514,13 +514,13 @@ string Parser::get_R_instruction(const string &op)
     else if (op == "jalr")
     {
         temp = get_next_token();
-        sReg = get_register_code(temp);
+        rs = get_register_code(temp);
 
         temp = get_next_token();
-        dReg = get_register_code(temp);
+        rd = get_register_code(temp);
 
-        shAmt = "00000";
-        tReg = "00000";
+        shamt = "00000";
+        rt = "00000";
 
         func = "001001";
     }
@@ -528,13 +528,13 @@ string Parser::get_R_instruction(const string &op)
     // op rd rt shamt
     else if (op == "sll" || op == "srl" || op == "sra")
     {
-        sReg = "00000";
+        rs = "00000";
         temp = get_next_token();
-        dReg = get_register_code(temp);
+        rd = get_register_code(temp);
         temp = get_next_token();
-        tReg = get_register_code(temp);
-        shAmt = get_next_token();
-        shAmt = zero_extent(shAmt, 5);
+        rt = get_register_code(temp);
+        shamt = get_next_token();
+        shamt = zero_extent(shamt, 5);
 
         if (op == "sll")
             func = "000000";
@@ -550,10 +550,10 @@ string Parser::get_R_instruction(const string &op)
     else if (op == "jr" || op == "mthi" || op == "mtlo")
     {
         temp = get_next_token();
-        sReg = get_register_code(temp);
-        tReg = "00000";
-        dReg = "00000";
-        shAmt = "00000";
+        rs = get_register_code(temp);
+        rt = "00000";
+        rd = "00000";
+        shamt = "00000";
 
         if (op == "mthi")
             func = "010001";
@@ -569,10 +569,10 @@ string Parser::get_R_instruction(const string &op)
     else if (op == "mfhi" || op == "mflo")
     {
         temp = get_next_token();
-        dReg = get_register_code(temp);
-        sReg = "00000";
-        tReg = "00000";
-        shAmt = "00000";
+        rd = get_register_code(temp);
+        rs = "00000";
+        rt = "00000";
+        shamt = "00000";
 
         if (op == "mfhi")
             func = "010000";
@@ -581,7 +581,7 @@ string Parser::get_R_instruction(const string &op)
         else
             ;
     }
-    string machine_code = opCode + sReg + tReg + dReg + shAmt + func;
+    string machine_code = opcode + rs + rt + rd + shamt + func;
     return machine_code;
 }
 
@@ -595,18 +595,18 @@ string Parser::get_I_instruction(const string &op)
         2. rs: register that contains the base address
         3. rt: the destination/source register (depends on the operation)
         4. immediate: a numerical value or offset (depends on the operation)
-        */
-    string opCode, sReg, tReg, imme;
+    */
+    string opcode, rs, rt, imme;
     string temp;
     uint32_t addr;
     // op rs rt imme
     if (op == "beq" || op == "bne")
     {
         temp = get_next_token();
-        sReg = get_register_code(temp);
+        rs = get_register_code(temp);
 
         temp = get_next_token();
-        tReg = get_register_code(temp);
+        rt = get_register_code(temp);
 
         temp = get_next_token();
         addr = label_to_addr[temp];
@@ -615,9 +615,9 @@ string Parser::get_I_instruction(const string &op)
         imme = zero_extent(temp, 16);
 
         if (op == "beq")
-            opCode = "000100";
+            opcode = "000100";
         else if (op == "bne")
-            opCode = "000101";
+            opcode = "000101";
     }
 
     // op rt ts imme
@@ -625,9 +625,9 @@ string Parser::get_I_instruction(const string &op)
              op == "xori" || op == "slti" || op == "slti" || op == "sltiu")
     {
         temp = get_next_token();
-        tReg = get_register_code(temp);
+        rt = get_register_code(temp);
         temp = get_next_token();
-        sReg = get_register_code(temp);
+        rs = get_register_code(temp);
 
         temp = get_next_token();
 
@@ -637,19 +637,19 @@ string Parser::get_I_instruction(const string &op)
             imme = zero_extent(temp, 16);
 
         if (op == "addi")
-            opCode = "001000";
+            opcode = "001000";
         else if (op == "addiu")
-            opCode = "001001";
+            opcode = "001001";
         else if (op == "andi")
-            opCode = "001100";
+            opcode = "001100";
         else if (op == "ori")
-            opCode = "001101";
+            opcode = "001101";
         else if (op == "xori")
-            opCode = "001110";
+            opcode = "001110";
         else if (op == "slti")
-            opCode = "001010";
+            opcode = "001010";
         else if (op == "sltiu")
-            opCode = "001011";
+            opcode = "001011";
     }
 
     // op rt imme(rs)
@@ -658,60 +658,60 @@ string Parser::get_I_instruction(const string &op)
              op == "lwr" || op == "swl" || op == "swr")
     {
         temp = get_next_token();
-        tReg = get_register_code(temp);
+        rt = get_register_code(temp);
 
         // imme(rs)
         temp = get_next_token();
         imme = temp.substr(0, temp.find('('));
         imme = zero_extent(imme, 16);
-        sReg = temp.substr(temp.find('(') + 1, temp.find(')') - temp.find('(') - 1);
-        sReg = get_register_code(sReg);
+        rs = temp.substr(temp.find('(') + 1, temp.find(')') - temp.find('(') - 1);
+        rs = get_register_code(rs);
 
         if (op == "lw")
-            opCode = "100011";
+            opcode = "100011";
         else if (op == "sw")
-            opCode = "101011";
+            opcode = "101011";
         else if (op == "lb")
-            opCode = "100000";
+            opcode = "100000";
         else if (op == "lbu")
-            opCode = "100100";
+            opcode = "100100";
         else if (op == "lh")
-            opCode = "100001";
+            opcode = "100001";
         else if (op == "lhu")
-            opCode = "100101";
+            opcode = "100101";
         else if (op == "sb")
-            opCode = "101000";
+            opcode = "101000";
         else if (op == "sh")
-            opCode = "101001";
+            opcode = "101001";
         else if (op == "lwl")
-            opCode = "100010";
+            opcode = "100010";
         else if (op == "lwr")
-            opCode = "100110";
+            opcode = "100110";
         else if (op == "swl")
-            opCode = "101010";
+            opcode = "101010";
         else if (op == "swr")
-            opCode = "101110";
+            opcode = "101110";
     }
 
     // op rt imme
     else if (op == "lui")
     {
         temp = get_next_token();
-        tReg = get_register_code(temp);
+        rt = get_register_code(temp);
 
-        sReg = "00000";
+        rs = "00000";
 
         temp = get_next_token();
         imme = zero_extent(temp, 16);
 
-        opCode = "001111";
+        opcode = "001111";
     }
 
     // op rs imme
     else if (op == "blez" || op == "bltz" || op == "bgtz" || op == "bgez")
     {
         temp = get_next_token();
-        sReg = get_register_code(temp);
+        rs = get_register_code(temp);
 
         temp = get_next_token();
         addr = label_to_addr[temp];
@@ -720,29 +720,29 @@ string Parser::get_I_instruction(const string &op)
 
         if (op == "bgez")
         {
-            opCode = "000001";
-            tReg = "00001";
+            opcode = "000001";
+            rt = "00001";
         }
         else if (op == "bgtz")
         {
-            opCode = "000111";
-            tReg = "00000";
+            opcode = "000111";
+            rt = "00000";
         }
         else if (op == "blez")
         {
-            opCode = "000110";
-            tReg = "00000";
+            opcode = "000110";
+            rt = "00000";
         }
         else if (op == "bltz")
         {
-            opCode = "000001";
-            tReg = "00000";
+            opcode = "000001";
+            rt = "00000";
         }
 
         else
             ;
     }
-    string machine_code = opCode + sReg + tReg + imme;
+    string machine_code = opcode + rs + rt + imme;
     return machine_code;
 }
 
@@ -756,13 +756,13 @@ string Parser::get_J_instruction(const string &op)
         2. address: the address to jump to, usually associate with a label. Since the
         address of an instruction in the memory is always divisible by 4 (think about
         why), the last two bits are always zero, so the last two bits are dropped.
-        */
-    string opCode, target;
+    */
+    string opcode, target;
     uint32_t addr;
     if (op == "j")
-        opCode = "000010";
+        opcode = "000010";
     else if (op == "jal")
-        opCode = "000011";
+        opcode = "000011";
     else
         ;
 
@@ -772,7 +772,7 @@ string Parser::get_J_instruction(const string &op)
     target = to_string(addr);
     target = zero_extent(target, 26);
 
-    string machine_code = opCode + target;
+    string machine_code = opcode + target;
     return machine_code;
 }
 
