@@ -19,9 +19,9 @@ clean:
 
 asm_test: $(PROM)
 	for t in $(ASM_TESTS); do \
-		./$(PROM) $(TEST_DIR)/$$t.asm $(TEST_DIR)/$$t.tasmout 2>&1 | \
+		./$(PROM) $(TEST_DIR)/$$t.asm $(TEST_DIR)/$$t.tasmout 2>&1; \
 		diff -q $(TEST_DIR)/$$t.asmout $(TEST_DIR)/$$t.tasmout > /dev/null || \
-			echo "Test $$t failed" && exit 1; \
+			echo "Test $$t failed"; \
 	done
 	echo -e "All assembler tests passed!\n"
 

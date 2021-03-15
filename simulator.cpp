@@ -1,3 +1,6 @@
+// #define DEBUG_ASS
+#define DEBUG_DATA
+
 #include <bitset>
 #include <iostream>
 #include <algorithm>
@@ -9,7 +12,6 @@
 #include <fstream>
 using namespace std;
 
-// #define DEBUG_ASS
 class Assembler
 {
 public:
@@ -54,6 +56,7 @@ public:
         string get_O_instruction(const string &op);
         string get_next_token();
         string get_register_code(const string &r);
+        string get_ascii_data(const string &data);
         int get_op_type(const string &op);
         string zero_extent(const string &s, const size_t target);
         void process_dataseg();
@@ -74,14 +77,14 @@ void Assembler::Scanner::scan(istream &in)
     split_data_and_text();
     preprocess_text();
 #ifdef DEBUG_ASS
-    cout << "---data seg---" << endl;
-    for (string &s : assembler.data_seg)
-        cout << s << endl;
-    cout << "---end data seg---" << endl;
-    cout << "---text seg---" << endl;
-    for (string &s : text_seg)
-        cout << s << endl;
-    cout << "---end text seg---" << endl;
+    // cout << "---data seg---" << endl;
+    // for (string &s : assembler.data_seg)
+    //     cout << s << endl;
+    // cout << "---end data seg---" << endl;
+    // cout << "---text seg---" << endl;
+    // for (string &s : assembler.text_seg)
+    //     cout << s << endl;
+    // cout << "---end text seg---" << endl;
 #endif
 }
 void Assembler::Scanner::get_assembly(istream &in)
@@ -177,7 +180,6 @@ void Assembler::Scanner::preprocess_text()
     }
     assembler.text_seg = new_text_seg;
 }
-
 string Assembler::Parser::get_next_token()
 {
     string s = *cur_string;
@@ -187,8 +189,154 @@ string Assembler::Parser::get_next_token()
     cur_string_idx = end_idx;
     return res;
 }
+string Assembler::Parser::get_ascii_data(const string &data)
+{
+#ifdef DEBUG_DATA
+    cout << data << endl;
+#endif
+    string res;
+    for (size_t i = 0; i < data.size(); i++)
+    {
+        if (data[i] == '\\' && i + 1 < data.size())
+        {
+            switch (data[i + 1])
+            {
+            case 'n':
+                res += bitset<8>((uint8_t)('\n')).to_string();
+                break;
+            case 't':
+                res += bitset<8>((uint8_t)('\t')).to_string();
+                break;
+            case '\'':
+                res += bitset<8>((uint8_t)('\'')).to_string();
+                break;
+            case '\"':
+                res += bitset<8>((uint8_t)('\"')).to_string();
+                break;
+            case '\\':
+                res += bitset<8>((uint8_t)('\\')).to_string();
+                break;
+            default:
+                break;
+            }
+        }
+        else
+        {
+            res += bitset<8>((uint8_t)(data[i])).to_string();
+        }
+    }
+    return res;
+}
 void Assembler::Parser::process_dataseg()
 {
+#ifndef DEBUG_ASS
+    assembler.output.push_back(".data");
+#endif
+    for (string &s : assembler.data_seg)
+    {
+        string target_str, tmp;
+        size_t st_idx, end_idx;
+        if (s.find(".asciiz") != string::npos)
+        {
+            // Store the string str in memory and null- terminate it.
+            target_str = ".asciiz";
+            st_idx = s.find(target_str) + target_str.size();
+            st_idx = s.find('\"', st_idx) + 1;
+            end_idx = s.find('\"', st_idx);
+            tmp = s.substr(st_idx, end_idx - st_idx);
+            // add \0 terminator
+            tmp = get_ascii_data(tmp) + bitset<8>(static_cast<unsigned long long>('\0')).to_string();
+            assembler.output.push_back(tmp);
+        }
+        else if (s.find(".ascii") != string::npos)
+        {
+            // Store the string str in memory, but do not nullterminate it.
+            target_str = ".ascii";
+            st_idx = s.find(target_str) + target_str.size();
+            st_idx = s.find('\"', st_idx) + 1;
+            end_idx = s.find('\"', st_idx);
+            tmp = s.substr(st_idx, end_idx - st_idx);
+            assembler.output.push_back(get_ascii_data(tmp));
+        }
+        else if (s.find(".word") != string::npos)
+        {
+            target_str = ".word";
+            st_idx = s.find(target_str) + target_str.size();
+            for (size_t i = st_idx; i < s.size(); i++)
+            {
+                if (s[i] == ' ' || s[i] == ',')
+                    continue;
+                st_idx = i;
+                while (s[i] >= '0' && s[i] <= '9')
+                {
+                    ++i;
+                }
+                string numstr = s.substr(st_idx, i - st_idx);
+                // word: 32bits
+                assembler.output.push_back(zero_extent(numstr, 32));
+            }
+        }
+        else if (s.find(".byte") != string::npos)
+        {
+            string res;
+            target_str = ".byte";
+            st_idx = s.find(target_str) + target_str.size();
+            for (size_t i = st_idx; i < s.size(); i++)
+            {
+                if (s[i] == ' ' || s[i] == ',')
+                    continue;
+                st_idx = i;
+                while (s[i] >= '0' && s[i] <= '9')
+                {
+                    ++i;
+                }
+                string numstr = s.substr(st_idx, i - st_idx);
+                // byte: 8bits
+                res += zero_extent(numstr, 8);
+            }
+            assembler.output.push_back(res);
+        }
+        else if (s.find(".half") != string::npos)
+        {
+            string res;
+            target_str = ".half";
+            st_idx = s.find(target_str) + target_str.size();
+            for (size_t i = st_idx; i < s.size(); i++)
+            {
+                if (s[i] == ' ' || s[i] == ',')
+                    continue;
+                st_idx = i;
+                while (s[i] >= '0' && s[i] <= '9')
+                {
+                    ++i;
+                }
+                string numstr = s.substr(st_idx, i - st_idx);
+                // half: 16bits
+                res += zero_extent(numstr, 16);
+            }
+            assembler.output.push_back(res);
+        }
+    }
+    // 补0或者截断
+    for (size_t i = 0; i < assembler.output.size(); i++)
+    {
+        string s = assembler.output[i];
+        if (s.find(".data") != string::npos)
+            continue;
+        if (s.size() > 32)
+        {
+            while (s.size() > 32)
+            {
+                assembler.output.insert(assembler.output.begin() + i, s.substr(0, 32));
+                ++i;
+                s = s.substr(32, string::npos);
+                if (s.size() <= 32)
+                    assembler.output[i] = s;
+            }
+        }
+        while (assembler.output[i].size() < 32)
+            assembler.output[i].push_back('0');
+    }
 }
 void Assembler::Parser::find_label()
 {
@@ -207,7 +355,7 @@ void Assembler::Parser::find_label()
         }
         label_pc += 4;
     }
-#ifdef DEBUG_ASS
+#ifdef DEBUG_LABEL
     for (auto &it : label_to_addr)
     {
         cout << it.first << " " << hex << it.second << endl;
@@ -334,6 +482,9 @@ string Assembler::Parser::zero_extent(const string &s, const size_t target)
     case 26:
         res = bitset<26>(num).to_string();
         break;
+    case 32:
+        res = bitset<32>(num).to_string();
+        break;
     default:
         break;
     }
@@ -343,6 +494,9 @@ void Assembler::Parser::parse()
 {
     process_dataseg();
     find_label();
+#ifndef DEBUG_ASS
+    assembler.output.push_back(".text");
+#endif
     for (string &s : assembler.text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
@@ -350,10 +504,6 @@ void Assembler::Parser::parse()
         i = s.find_first_not_of(' ', i);
         size_t end_idx = s.find(' ', i) == string::npos ? s.size() : s.find(' ', i);
         string op = s.substr(i, end_idx - i);
-        // #ifdef DEBUG_ASS
-        //         if (op == "syscall")
-        //             cout << s << endl;
-        // #endif
         cur_string_idx = s.find(' ', i);
         switch (get_op_type(op))
         {
