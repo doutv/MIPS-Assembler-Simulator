@@ -9,7 +9,7 @@
 #include <fstream>
 using namespace std;
 
-#define DEBUG
+// #define DEBUG
 
 class Scanner
 {
@@ -32,6 +32,16 @@ void Scanner::scan(istream &in)
     remove_comments();
     split_data_and_text();
     preprocess_text();
+#ifdef DEBUG
+    cout << "---data seg---" << endl;
+    for (string &s : data_seg)
+        cout << s << endl;
+    cout << "---end data seg---" << endl;
+    cout << "---text seg---" << endl;
+    for (string &s : text_seg)
+        cout << s << endl;
+    cout << "---end text seg---" << endl;
+#endif
 }
 vector<string> &Scanner::get_data_seg()
 {
@@ -57,9 +67,6 @@ void Scanner::remove_comments()
     {
         if (s.find('#') != string::npos)
             s.erase(s.find('#'), s.size());
-        // for (size_t i = 0; i < s.size(); i++)
-        //     if (s[i] == '#')
-        //         s.erase(i, s.size());
         if (s.find_first_not_of(' ') == string::npos)
             continue;
         if (!s.empty())
@@ -71,39 +78,32 @@ void Scanner::split_data_and_text()
 {
     /*
     split data and text part
-    remove empty lines
+    .data 和 .text 可能交错出现
     */
     size_t i;
     for (i = 0; i < file.size(); i++)
     {
         string s = file[i];
-        // remove empty lines
-        if (s.empty())
-            continue;
         if (s.find(".text") != string::npos)
         {
-            size_t j;
-            for (j = i + 1; j < file.size(); j++)
+            for (++i; i < file.size(); i++)
             {
-                s = file[j];
-                if (s.find(".data") != string::npos)
+                if (file[i].find(".data") != string::npos)
                     break;
-                text_seg.push_back(s);
+                text_seg.push_back(file[i]);
             }
-            i = j - 1;
+            --i;
             continue;
         }
         if (s.find(".data") != string::npos)
         {
-            size_t j;
-            for (size_t j = i + 1; j < file.size(); j++)
+            for (++i; i < file.size(); i++)
             {
-                s = file[j];
-                if (s.find(".text") != string::npos)
+                if (file[i].find(".text") != string::npos)
                     break;
-                data_seg.push_back(s);
+                data_seg.push_back(file[i]);
             }
-            i = j - 1;
+            --i;
             continue;
         }
     }
@@ -345,10 +345,7 @@ void Parser::parse()
     process_dataseg();
     find_label();
 #ifdef DEBUG
-    cout << "start text seg" << endl;
-    for (string &s : text_seg)
-        cout << s << endl;
-    cout << "end text seg" << endl;
+
 #endif
     for (string &s : text_seg)
     {
