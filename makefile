@@ -1,11 +1,12 @@
-prom = assembler
+prom = simulator
 test_dir = ./test
-tests = 1 2 3 4 5 6 7 8 9 10 11 12 a-plus-b fib memcpy-hello-world
+asm_tests = 1 2 3 4 5 6 7 8 9 10 11 12 a-plus-b fib memcpy-hello-world
+sim_tests = a-plus-b fib memcpy-hello-world
 
 .PHONY: test all clean
 .ONESHELL:
 
-all: $(prom) test
+all: $(prom) asm_test sim_tests
 	@echo "All tests passed!"
 
 $(prom): $(prom).cpp
@@ -13,15 +14,19 @@ $(prom): $(prom).cpp
 
 clean:
 	rm $(prom)
-	rm $(test_dir)/*.test
+	rm $(test_dir)/*.tasmout
+	rm $(test_dir)/*.tsimout
 
-test: $(prom)
-	for t in $(tests); do \
-		./$(prom) $(test_dir)/$$t.in $(test_dir)/$$t.test 2>&1; \
-		diff -q $(test_dir)/$$t.out $(test_dir)/$$t.test > /dev/null || \
+asm_test: $(prom)
+	for t in $(asm_tests); do \
+		./$(prom) $(test_dir)/$$t.asm $(test_dir)/$$t.tasmout 2>&1; \
+		diff -q $(test_dir)/$$t.asmout $(test_dir)/$$t.tasmout > /dev/null || \
 			(echo "Test $$t failed" && exit 1); \
 	done
-# %.test:  $(prom) %.in %.out
-# 	./$(prom) $(test_dir)/$< $(test_dir)/$(word 2, $?) | diff -q $(word 2, $?) -> /dev/null || \
-# 	(echo "Test $@ failed" && exit 1)
-	
+
+sim_test: $(prom)
+	for t in $(sim_tests); do \
+		./$(prom) $(test_dir)/$$t.asm $(test_dir)/$$t.in $(test_dir)/$$t.tsimout 2>&1; \
+		diff -q $(test_dir)/$$t.out $(test_dir)/$$t.tsimout > /dev/null || \
+			(echo "Test $$t failed" && exit 1); \
+	done

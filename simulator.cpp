@@ -9,7 +9,7 @@
 #include <fstream>
 using namespace std;
 
-// #define DEBUG
+// #define DEBUG_ASS
 class Assembler
 {
 public:
@@ -73,7 +73,7 @@ void Assembler::Scanner::scan(istream &in)
     remove_comments();
     split_data_and_text();
     preprocess_text();
-#ifdef DEBUG
+#ifdef DEBUG_ASS
     cout << "---data seg---" << endl;
     for (string &s : assembler.data_seg)
         cout << s << endl;
@@ -207,7 +207,7 @@ void Assembler::Parser::find_label()
         }
         label_pc += 4;
     }
-#ifdef DEBUG
+#ifdef DEBUG_ASS
     for (auto &it : label_to_addr)
     {
         cout << it.first << " " << hex << it.second << endl;
@@ -343,9 +343,6 @@ void Assembler::Parser::parse()
 {
     process_dataseg();
     find_label();
-#ifdef DEBUG
-
-#endif
     for (string &s : assembler.text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
@@ -353,7 +350,7 @@ void Assembler::Parser::parse()
         i = s.find_first_not_of(' ', i);
         size_t end_idx = s.find(' ', i) == string::npos ? s.size() : s.find(' ', i);
         string op = s.substr(i, end_idx - i);
-        // #ifdef DEBUG
+        // #ifdef DEBUG_ASS
         //         if (op == "syscall")
         //             cout << s << endl;
         // #endif
@@ -774,6 +771,11 @@ string Assembler::Parser::get_J_instruction(const string &op)
     string machine_code = opcode + target;
     return machine_code;
 }
+
+class Simulator
+{
+    Simulator();
+};
 
 int main(int argc, char *argv[])
 {
