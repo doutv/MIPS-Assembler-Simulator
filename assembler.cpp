@@ -9,7 +9,7 @@
 #include <fstream>
 using namespace std;
 
-#define DEBUG
+// #define DEBUG
 
 class Scanner
 {
@@ -49,14 +49,16 @@ void Scanner::get_assembly(istream &in)
 }
 void Scanner::remove_comments()
 {
+    vector<string> new_file;
     for (string &s : file)
     {
-        if (s.empty())
-            continue;
         for (size_t i = 0; i < s.size(); i++)
             if (s[i] == '#')
                 s.erase(i, s.size());
+        if (!s.empty())
+            new_file.push_back(s);
     }
+    file = new_file;
 }
 void Scanner::split_data_and_text()
 {
@@ -113,15 +115,20 @@ void Scanner::preprocess_text()
         s = text_seg[i];
         if (s.find(':') != string::npos)
         {
-            s = text_seg[i].substr(0, s.find(':') + 1);
-            s += text_seg.at(i + 1);
-            new_text_seg.push_back(s);
-            ++i;
+            // locate label
+            if (s.find_last_not_of(' ') == s.find(':'))
+            {
+                // 当前行只有 label:
+                s = text_seg[i].substr(0, s.find(':') + 1);
+                s += text_seg.at(i + 1);
+                new_text_seg.push_back(s);
+                ++i;
+            }
+            else
+                new_text_seg.push_back(s);
         }
         else
-        {
             new_text_seg.push_back(s);
-        }
     }
     for (string &s : new_text_seg)
     {
@@ -193,10 +200,10 @@ void Parser::find_label()
         label_pc += 4;
     }
 #ifdef DEBUG
-    // for (auto &it : label_to_addr)
-    // {
-    //     cout << it.first << " " << it.second << endl;
-    // }
+    for (auto &it : label_to_addr)
+    {
+        cout << it.first << " " << hex << it.second << endl;
+    }
 #endif
 }
 void Parser::print_machine_code(ostream &out)
@@ -289,7 +296,7 @@ int Parser::get_op_type(const string &op)
              op == "beq" || op == "bne" || op == "slti" || op == "sltiu" ||
              op == "lb" || op == "lbu" || op == "lh" || op == "lhu" ||
              op == "sb" || op == "sh" || op == "blez" || op == "bltz" ||
-             op == "bgez" || op == "bgtz")
+             op == "bgez" || op == "bgtz" || op == "lwl" || op == "lwr")
         return I_type;
     else if (op == "j" || op == "jal")
         return J_type;
@@ -324,12 +331,12 @@ void Parser::parse()
 {
     process_dataseg();
     find_label();
-    // #ifdef DEBUG
-    //     for (string &s : text_seg)
-    //         cout << s << endl;
-    //     cout << endl
-    //          << endl;
-    // #endif
+#ifdef DEBUG
+    for (string &s : text_seg)
+        cout << s << endl;
+    cout << endl
+         << endl;
+#endif
     for (string &s : text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
@@ -542,10 +549,6 @@ string Parser::get_R_instruction(const string &op)
             ;
     }
     string machine_code = opCode + sReg + tReg + dReg + shAmt + func;
-#ifdef DEBUG
-    if (machine_code == "00000000100001011100000000100101")
-        cout << op << endl;
-#endif
     return machine_code;
 }
 
@@ -582,8 +585,6 @@ string Parser::get_I_instruction(const string &op)
             opCode = "000100";
         else if (op == "bne")
             opCode = "000101";
-        else
-            ;
     }
 
     // op rt ts imme
@@ -616,13 +617,12 @@ string Parser::get_I_instruction(const string &op)
             opCode = "001010";
         else if (op == "sltiu")
             opCode = "001011";
-        else
-            ;
     }
 
     // op rt imme(rs)
     else if (op == "lw" || op == "sw" || op == "lb" || op == "lbu" || op == "lh" ||
-             op == "lhu" || op == "sb" || op == "sb" || op == "sh")
+             op == "lhu" || op == "sb" || op == "sb" || op == "sh" || op == "lwl" ||
+             op == "lwr")
     {
         temp = get_next_token();
         tReg = get_register_code(temp);
@@ -650,8 +650,10 @@ string Parser::get_I_instruction(const string &op)
             opCode = "101000";
         else if (op == "sh")
             opCode = "101001";
-        else
-            ;
+        else if (op == "lwl")
+            opCode = "100010";
+        else if (op == "lwr")
+            opCode = "100110";
     }
 
     // op rt imme
