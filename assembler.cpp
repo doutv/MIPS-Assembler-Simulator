@@ -9,7 +9,7 @@
 #include <fstream>
 using namespace std;
 
-// #define DEBUG
+#define DEBUG
 
 class Scanner
 {
@@ -49,12 +49,19 @@ void Scanner::get_assembly(istream &in)
 }
 void Scanner::remove_comments()
 {
+    /*
+    remove comments and empty lines
+    */
     vector<string> new_file;
     for (string &s : file)
     {
-        for (size_t i = 0; i < s.size(); i++)
-            if (s[i] == '#')
-                s.erase(i, s.size());
+        if (s.find('#') != string::npos)
+            s.erase(s.find('#'), s.size());
+        // for (size_t i = 0; i < s.size(); i++)
+        //     if (s[i] == '#')
+        //         s.erase(i, s.size());
+        if (s.find_first_not_of(' ') == string::npos)
+            continue;
         if (!s.empty())
             new_file.push_back(s);
     }
@@ -159,6 +166,8 @@ public:
     string get_R_instruction(const string &op);
     string get_I_instruction(const string &op);
     string get_J_instruction(const string &op);
+    string get_O_instruction(const string &op);
+
     string get_next_token();
     string get_register_code(const string &r);
     int get_op_type(const string &op);
@@ -296,7 +305,8 @@ int Parser::get_op_type(const string &op)
              op == "beq" || op == "bne" || op == "slti" || op == "sltiu" ||
              op == "lb" || op == "lbu" || op == "lh" || op == "lhu" ||
              op == "sb" || op == "sh" || op == "blez" || op == "bltz" ||
-             op == "bgez" || op == "bgtz" || op == "lwl" || op == "lwr")
+             op == "bgez" || op == "bgtz" || op == "lwl" || op == "lwr" ||
+             op == "swl" || op == "swr")
         return I_type;
     else if (op == "j" || op == "jal")
         return J_type;
@@ -319,6 +329,9 @@ string Parser::zero_extent(const string &s, const size_t target)
     case 16:
         res = bitset<16>(num).to_string();
         break;
+    case 20:
+        res = bitset<20>(num).to_string();
+        break;
     case 26:
         res = bitset<26>(num).to_string();
         break;
@@ -332,19 +345,20 @@ void Parser::parse()
     process_dataseg();
     find_label();
 #ifdef DEBUG
+    cout << "start text seg" << endl;
     for (string &s : text_seg)
         cout << s << endl;
-    cout << endl
-         << endl;
+    cout << "end text seg" << endl;
 #endif
     for (string &s : text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
         cur_string = &s;
         i = s.find_first_not_of(' ', i);
-        string op = s.substr(i, s.find(' ', i) - i);
+        size_t end_idx = s.find(' ', i) == string::npos ? s.size() : s.find(' ', i);
+        string op = s.substr(i, end_idx - i);
         // #ifdef DEBUG
-        //         if (op == "xor" || op == "or")
+        //         if (op == "syscall")
         //             cout << s << endl;
         // #endif
         cur_string_idx = s.find(' ', i);
@@ -359,12 +373,34 @@ void Parser::parse()
         case J_type:
             output.push_back(get_J_instruction(op));
             break;
+        case O_type:
+            output.push_back(get_O_instruction(op));
+            break;
         default:
             break;
         }
         pc += 4;
     }
 }
+string Parser::get_O_instruction(const string &op)
+{
+    string machine_code;
+    if (op == "nop")
+        machine_code = "00000000000000000000000000000000";
+    else if (op == "eret")
+        machine_code = "01000010000000000000000000011000";
+    else if (op == "syscall")
+        machine_code = "00000000000000000000000000001100";
+    else if (op == "break")
+    {
+        string temp;
+        temp = get_next_token();
+        temp = zero_extent(temp, 20);
+        machine_code = "000000" + temp + "001101";
+    }
+    return machine_code;
+}
+
 string Parser::get_R_instruction(const string &op)
 {
     /*
@@ -622,7 +658,7 @@ string Parser::get_I_instruction(const string &op)
     // op rt imme(rs)
     else if (op == "lw" || op == "sw" || op == "lb" || op == "lbu" || op == "lh" ||
              op == "lhu" || op == "sb" || op == "sb" || op == "sh" || op == "lwl" ||
-             op == "lwr")
+             op == "lwr" || op == "swl" || op == "swr")
     {
         temp = get_next_token();
         tReg = get_register_code(temp);
@@ -654,6 +690,10 @@ string Parser::get_I_instruction(const string &op)
             opCode = "100010";
         else if (op == "lwr")
             opCode = "100110";
+        else if (op == "swl")
+            opCode = "101010";
+        else if (op == "swr")
+            opCode = "101110";
     }
 
     // op rt imme
@@ -679,13 +719,6 @@ string Parser::get_I_instruction(const string &op)
         temp = get_next_token();
         addr = label_to_addr[temp];
         addr = (addr - (pc + 4)) / 4; // compute offset
-#ifdef DEBUG
-        // if (op == "blez")
-        // {
-        //     cout << pc << " " << addr << endl;
-        //     cout << temp << " : " << hex << addr << endl;
-        // }
-#endif
         imme = zero_extent(to_string(addr), 16);
 
         if (op == "bgez")
