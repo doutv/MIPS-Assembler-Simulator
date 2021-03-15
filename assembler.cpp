@@ -10,23 +10,64 @@
 using namespace std;
 
 // #define DEBUG
-
-class Scanner
+class Assembler
 {
 public:
-    vector<string> file;
     vector<string> data_seg;
     vector<string> text_seg;
-    void get_assembly(istream &in);
-    void remove_comments();
-    void split_data_and_text();
-    void preprocess_text();
-    vector<string> &get_data_seg();
-    vector<string> &get_text_seg();
-    void scan(istream &in);
-    Scanner(){};
+    vector<string> output;
+    class Scanner
+    {
+    public:
+        Assembler &assembler;
+        vector<string> file;
+
+        void get_assembly(istream &in);
+        void remove_comments();
+        void split_data_and_text();
+        void preprocess_text();
+        vector<string> &get_data_seg();
+        vector<string> &get_text_seg();
+        void scan(istream &in);
+        Scanner(Assembler &assembler) : assembler(assembler) {}
+    };
+    class Parser
+    {
+    public:
+        Assembler &assembler;
+        enum optype
+        {
+            O_type,
+            R_type,
+            I_type,
+            J_type,
+            P_type
+        };
+        unordered_map<string, uint32_t> label_to_addr;
+        uint32_t pc = 0x400000;
+        string *cur_string;
+        size_t cur_string_idx;
+
+        string get_R_instruction(const string &op);
+        string get_I_instruction(const string &op);
+        string get_J_instruction(const string &op);
+        string get_O_instruction(const string &op);
+        string get_next_token();
+        string get_register_code(const string &r);
+        int get_op_type(const string &op);
+        string zero_extent(const string &s, const size_t target);
+        void process_dataseg();
+        void find_label();
+        void parse();
+        void print_machine_code(ostream &out);
+        Parser(Assembler &assembler) : assembler(assembler) {}
+    };
+    Scanner scanner;
+    Parser parser;
+    Assembler() : scanner(*this), parser(*this) {}
 };
-void Scanner::scan(istream &in)
+
+void Assembler::Scanner::scan(istream &in)
 {
     get_assembly(in);
     remove_comments();
@@ -34,7 +75,7 @@ void Scanner::scan(istream &in)
     preprocess_text();
 #ifdef DEBUG
     cout << "---data seg---" << endl;
-    for (string &s : data_seg)
+    for (string &s : assembler.data_seg)
         cout << s << endl;
     cout << "---end data seg---" << endl;
     cout << "---text seg---" << endl;
@@ -43,21 +84,13 @@ void Scanner::scan(istream &in)
     cout << "---end text seg---" << endl;
 #endif
 }
-vector<string> &Scanner::get_data_seg()
-{
-    return data_seg;
-}
-vector<string> &Scanner::get_text_seg()
-{
-    return text_seg;
-}
-void Scanner::get_assembly(istream &in)
+void Assembler::Scanner::get_assembly(istream &in)
 {
     string s;
     while (getline(in, s))
         file.push_back(s);
 }
-void Scanner::remove_comments()
+void Assembler::Scanner::remove_comments()
 {
     /*
     remove comments and empty lines
@@ -74,7 +107,7 @@ void Scanner::remove_comments()
     }
     file = new_file;
 }
-void Scanner::split_data_and_text()
+void Assembler::Scanner::split_data_and_text()
 {
     /*
     split data and text part
@@ -90,7 +123,7 @@ void Scanner::split_data_and_text()
             {
                 if (file[i].find(".data") != string::npos)
                     break;
-                text_seg.push_back(file[i]);
+                assembler.text_seg.push_back(file[i]);
             }
             --i;
             continue;
@@ -101,14 +134,14 @@ void Scanner::split_data_and_text()
             {
                 if (file[i].find(".text") != string::npos)
                     break;
-                data_seg.push_back(file[i]);
+                assembler.data_seg.push_back(file[i]);
             }
             --i;
             continue;
         }
     }
 }
-void Scanner::preprocess_text()
+void Assembler::Scanner::preprocess_text()
 {
     /*
     将 label 和指令放在同一行
@@ -117,17 +150,17 @@ void Scanner::preprocess_text()
     */
     vector<string> new_text_seg;
     string s;
-    for (size_t i = 0; i < text_seg.size(); i++)
+    for (size_t i = 0; i < assembler.text_seg.size(); i++)
     {
-        s = text_seg[i];
+        s = assembler.text_seg[i];
         if (s.find(':') != string::npos)
         {
             // locate label
             if (s.find_last_not_of(' ') == s.find(':'))
             {
                 // 当前行只有 label:
-                s = text_seg[i].substr(0, s.find(':') + 1);
-                s += text_seg.at(i + 1);
+                s = assembler.text_seg[i].substr(0, s.find(':') + 1);
+                s += assembler.text_seg.at(i + 1);
                 new_text_seg.push_back(s);
                 ++i;
             }
@@ -142,44 +175,10 @@ void Scanner::preprocess_text()
         replace(s.begin(), s.end(), ',', ' ');
         s.erase(remove(s.begin(), s.end(), '\t'), s.end());
     }
-    text_seg = new_text_seg;
+    assembler.text_seg = new_text_seg;
 }
-class Parser
-{
-public:
-    enum optype
-    {
-        O_type,
-        R_type,
-        I_type,
-        J_type,
-        P_type
-    };
-    vector<string> &data_seg;
-    vector<string> &text_seg;
-    vector<string> output;
-    unordered_map<string, uint32_t> label_to_addr;
-    uint32_t pc;
-    string *cur_string;
-    size_t cur_string_idx;
 
-    string get_R_instruction(const string &op);
-    string get_I_instruction(const string &op);
-    string get_J_instruction(const string &op);
-    string get_O_instruction(const string &op);
-
-    string get_next_token();
-    string get_register_code(const string &r);
-    int get_op_type(const string &op);
-    string zero_extent(const string &s, const size_t target);
-    void process_dataseg();
-    void find_label();
-    void parse();
-    void print_machine_code(ostream &out);
-    Parser(vector<string> &in_data_seg, vector<string> &in_text_seg, uint32_t init_pc) : data_seg(in_data_seg), text_seg(in_text_seg), pc(init_pc) {}
-};
-
-string Parser::get_next_token()
+string Assembler::Parser::get_next_token()
 {
     string s = *cur_string;
     size_t st_idx = s.find_first_not_of(' ', cur_string_idx);
@@ -188,13 +187,13 @@ string Parser::get_next_token()
     cur_string_idx = end_idx;
     return res;
 }
-void Parser::process_dataseg()
+void Assembler::Parser::process_dataseg()
 {
 }
-void Parser::find_label()
+void Assembler::Parser::find_label()
 {
     uint32_t label_pc = pc;
-    for (string &s : text_seg)
+    for (string &s : assembler.text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':');
         if (i)
@@ -215,12 +214,12 @@ void Parser::find_label()
     }
 #endif
 }
-void Parser::print_machine_code(ostream &out)
+void Assembler::Parser::print_machine_code(ostream &out)
 {
-    for (string &s : output)
+    for (string &s : assembler.output)
         out << s << endl;
 }
-string Parser::get_register_code(const string &r)
+string Assembler::Parser::get_register_code(const string &r)
 {
     if (r == "$0" || r == "$zero")
         return "00000";
@@ -287,7 +286,7 @@ string Parser::get_register_code(const string &r)
     else
         return "11111";
 }
-int Parser::get_op_type(const string &op)
+int Assembler::Parser::get_op_type(const string &op)
 {
     if (op == "eret" || op == "syscall" || op == "break" || op == "nop")
         return O_type;
@@ -313,7 +312,7 @@ int Parser::get_op_type(const string &op)
     else
         return P_type;
 }
-string Parser::zero_extent(const string &s, const size_t target)
+string Assembler::Parser::zero_extent(const string &s, const size_t target)
 {
     /*
     convert string in decimal to string in binary and add zero to its head
@@ -340,14 +339,14 @@ string Parser::zero_extent(const string &s, const size_t target)
     }
     return res;
 }
-void Parser::parse()
+void Assembler::Parser::parse()
 {
     process_dataseg();
     find_label();
 #ifdef DEBUG
 
 #endif
-    for (string &s : text_seg)
+    for (string &s : assembler.text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
         cur_string = &s;
@@ -362,16 +361,16 @@ void Parser::parse()
         switch (get_op_type(op))
         {
         case R_type:
-            output.push_back(get_R_instruction(op));
+            assembler.output.push_back(get_R_instruction(op));
             break;
         case I_type:
-            output.push_back(get_I_instruction(op));
+            assembler.output.push_back(get_I_instruction(op));
             break;
         case J_type:
-            output.push_back(get_J_instruction(op));
+            assembler.output.push_back(get_J_instruction(op));
             break;
         case O_type:
-            output.push_back(get_O_instruction(op));
+            assembler.output.push_back(get_O_instruction(op));
             break;
         default:
             break;
@@ -379,7 +378,7 @@ void Parser::parse()
         pc += 4;
     }
 }
-string Parser::get_O_instruction(const string &op)
+string Assembler::Parser::get_O_instruction(const string &op)
 {
     string machine_code;
     if (op == "nop")
@@ -398,7 +397,7 @@ string Parser::get_O_instruction(const string &op)
     return machine_code;
 }
 
-string Parser::get_R_instruction(const string &op)
+string Assembler::Parser::get_R_instruction(const string &op)
 {
     /*
         R-instruction:
@@ -585,7 +584,7 @@ string Parser::get_R_instruction(const string &op)
     return machine_code;
 }
 
-string Parser::get_I_instruction(const string &op)
+string Assembler::Parser::get_I_instruction(const string &op)
 {
     /*
         I-instruction:
@@ -746,7 +745,7 @@ string Parser::get_I_instruction(const string &op)
     return machine_code;
 }
 
-string Parser::get_J_instruction(const string &op)
+string Assembler::Parser::get_J_instruction(const string &op)
 {
     /*
         J-instruction:
@@ -778,14 +777,12 @@ string Parser::get_J_instruction(const string &op)
 
 int main(int argc, char *argv[])
 {
-    Scanner scanner;
-    uint32_t init_pc = 0x400000;
-    Parser parser(scanner.get_data_seg(), scanner.get_text_seg(), init_pc);
+    Assembler assembler;
     if (argc == 1)
     {
-        scanner.scan(cin);
-        parser.parse();
-        parser.print_machine_code(cout);
+        assembler.scanner.scan(cin);
+        assembler.parser.parse();
+        assembler.parser.print_machine_code(cout);
     }
     else if (argc == 2)
     {
@@ -795,9 +792,9 @@ int main(int argc, char *argv[])
             cout << argv[1] << "can not open" << endl;
             return 0;
         }
-        scanner.scan(filein);
-        parser.parse();
-        parser.print_machine_code(cout);
+        assembler.scanner.scan(filein);
+        assembler.parser.parse();
+        assembler.parser.print_machine_code(cout);
     }
     else if (argc == 3)
     {
@@ -813,9 +810,9 @@ int main(int argc, char *argv[])
             cout << argv[2] << "can not open" << endl;
             return 0;
         }
-        scanner.scan(filein);
-        parser.parse();
-        parser.print_machine_code(fileout);
+        assembler.scanner.scan(filein);
+        assembler.parser.parse();
+        assembler.parser.print_machine_code(fileout);
     }
 
     return 0;
