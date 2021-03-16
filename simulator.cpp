@@ -1068,10 +1068,11 @@ public:
     static string memory[memory_size];          // 4bytes for each element
     static const size_t reg_size = 32;
     static int32_t reg[reg_size];
-    size_t text_end_idx;
-    const size_t static_st_idx = 1000;
-    size_t dynamic_st_idx;
-    const size_t stack_end_idx = memory_size;
+    static size_t text_end_idx;
+    static const size_t static_st_idx = 1000;
+    static size_t dynamic_st_idx;
+    static size_t dynamic_end_idx;
+    static const size_t stack_end_idx = memory_size;
     unordered_map<string, size_t> regcode_to_idx;
     const vector<string> &input;
     vector<string> output;
@@ -1357,6 +1358,7 @@ public:
             }
             break;
         case 9: // sbrk
+            dynamic_end_idx += reg[a0_idx];
             reg[v0_idx] = reinterpret_cast<int32_t>(sbrk(reg[a0_idx]));
             break;
         case 10: // exit
