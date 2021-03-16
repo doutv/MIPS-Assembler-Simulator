@@ -2,6 +2,10 @@
 // #define DEBUG_DATA
 #define DEBUG_SIM
 
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <functional>
 #include <bitset>
 #include <iostream>
@@ -1060,10 +1064,10 @@ public:
     text_st_idx = 0
     */
     static const uint32_t base_vm = 0x400000;
-    static const size_t memory_size = 6000;
-    string memory[memory_size]; // 4bytes for each element
+    static const size_t memory_size = 6 * 1024; // 6MB
+    static string memory[memory_size];          // 4bytes for each element
     static const size_t reg_size = 32;
-    uint32_t reg[reg_size];
+    static int32_t reg[reg_size];
     size_t text_end_idx;
     const size_t static_st_idx = 1000;
     size_t dynamic_st_idx;
@@ -1077,7 +1081,8 @@ public:
     void init_reg_value();
     void store_text();
     void simulate();
-    size_t memmap(uint32_t vm);
+    static pair<size_t, size_t> memmap(uint32_t vm);
+    static void store_byte_to_memory(string &s, uint32_t addr);
     Simulator(vector<string> &input_) : input(input_) {}
 
     unordered_map<string, function<void(const string &)>> opcode_to_func;
@@ -1314,7 +1319,7 @@ public:
     static void instr_mflo(const string &mc)
     {
     }
-    static void instr_mthi(const string &mc)
+    static void instr_mthi(const string &
     {
     }
     static void instr_mtlo(const string &mc)
@@ -1322,8 +1327,82 @@ public:
     }
     static void instr_syscall(const string &mc)
     {
+        const size_t v0_idx = 2;
+        const size_t a0_idx = 4;
+        const size_t a1_idx = 5;
+        const size_t a2_idx = 6;
+        switch (reg[v0_idx])
+        {
+        case 1: // print_int
+            printf("%d", reg[a0_idx]);
+            break;
+        case 4: // print_string
+            printf("%s", reg[a0_idx]);
+            break;
+        case 5: // read_int
+            cin >> reg[v0_idx];
+            break;
+        case 8: // read_string
+            uint32_t addr = reg[a0_idx];
+            size_t len = reg[a1_idx];
+            for (size_t i = 0; i < len; i++)
+            {
+                char ch = getchar();
+                if (ch == '\0')
+                {
+                }
+                // convert char to string with size=8
+                string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
+                store_byte_to_memory(s, addr++);
+            }
+            break;
+        case 9: // sbrk
+            reg[v0_idx] = reinterpret_cast<int32_t>(sbrk(reg[a0_idx]));
+            break;
+        case 10: // exit
+            exit(0);
+            break;
+        case 11: // print_char
+            printf("%c", reg[a0_idx]);
+            break;
+        case 12: // read_char
+            scanf("%c", &reg[v0_idx]);
+            break;
+        case 13: // open
+            const char *filename = to_string(reg[a0_idx]).c_str();
+            reg[v0_idx] = open(filename, reg[a1_idx], reg[a2_idx]);
+            break;
+        case 14: // read
+            reg[v0_idx] = read(reg[a0_idx], (void *)(reg[a1_idx]), reg[a2_idx]);
+            break;
+        case 15: // write
+            reg[v0_idx] = write(reg[a0_idx], (const void *)reg[a1_idx], reg[a2_idx]);
+            break;
+        case 16:
+            close(reg[a0_idx]);
+            break;
+        case 17:
+            exit(reg[a0_idx]);
+            break;
+        default:
+            break;
+        }
     }
 };
+void Simulator::store_byte_to_memory(string &s, uint32_t addr)
+{
+    /*
+    @string s: s.size()=8
+    store one byte string (size=8) to memory
+    */
+    const size_t byte_len = 8;
+    size_t idx = memmap(addr).first;
+    size_t offset = memmap(addr).second;
+    if (memory[idx].size() && memory[idx].size() >= offset * byte_len)
+        memory[idx].replace(offset, byte_len, s);
+    else
+        memory[idx] += s;
+}
 void Simulator::gen_opcode_to_func()
 {
     /*
@@ -1474,9 +1553,14 @@ void Simulator::exec_instr(const string &mc)
         (it->second)(mc);
     }
 }
-size_t Simulator::memmap(uint32_t vm)
+pair<size_t, size_t> Simulator::memmap(uint32_t vm)
 {
-    return (vm - base_vm) / 4;
+    /*
+    idx: memory[idx] 4byte
+    offset={0,1,2,3}: memory[idx][offset] 1byte
+    @return pair<idx,offset>
+    */
+    return make_pair((vm - base_vm) / 4, (vm - base_vm) % 4);
 }
 void Simulator::init_reg_value()
 {
@@ -1512,9 +1596,9 @@ void Simulator::simulate()
 #ifdef DEBUG_SIM
     exec_instr("00100000100001000000000000000001");
 #endif
-    while (!memory[memmap(pc)].empty())
+    while (!memory[memmap(pc).first].empty())
     {
-        exec_instr(memory[memmap(pc)]);
+        exec_instr(memory[memmap(pc).first]);
         pc += 4;
     }
 }
