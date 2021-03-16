@@ -1,6 +1,8 @@
 // #define DEBUG_ASS
-#define DEBUG_DATA
+// #define DEBUG_DATA
+#define DEBUG_SIM
 
+#include <functional>
 #include <bitset>
 #include <iostream>
 #include <algorithm>
@@ -924,35 +926,417 @@ string Assembler::Parser::get_J_instruction(const string &op)
 
 class Simulator
 {
-    Simulator();
-};
+public:
+    /*
+    Memory structure:
+    stack_st_idx = 6000
+    | <- stack data
+    stack_end_idx
+    | 
+    dynamic_end_idx
+    | <- dynamic data
+    dynamic_st_idx = static_end_idx
+    | <- static data
+    static_st_idx = 1000
+    |
+    text_end_idx
+    | <- text data
+    text_st_idx = 0
+    */
+    static const uint32_t base_vm = 0x400000;
+    static const size_t memory_size = 6000;
+    string memory[memory_size]; // 4bytes for each element
+    static const size_t reg_size = 32;
+    uint32_t reg[reg_size];
+    size_t text_end_idx;
+    const size_t static_st_idx = 1000;
+    size_t dynamic_st_idx;
+    const size_t stack_end_idx = memory_size;
+    unordered_map<string, size_t> regcode_to_idx;
+    const vector<string> &input;
+    vector<string> output;
 
+    void gen_regcode_to_idx();
+    void store_static_data();
+    void init_reg_value();
+    void store_text();
+    void simulate();
+    size_t memmap(uint32_t vm);
+    Simulator(vector<string> &input_) : input(input_) {}
+
+    unordered_map<string, function<void(const string &)>> opcode_to_func;
+    unordered_map<string, function<void(const string &)>> Rfunc_to_func;
+    void exec_instr(const string &mc);
+    void gen_opcode_to_func();
+    void gen_Rfunc_to_func();
+    // lots of instruction functions
+    static void instr_add(const string &mc)
+    {
+    }
+    static void instr_addu(const string &mc)
+    {
+    }
+    static void instr_addi(const string &mc)
+    {
+    }
+    static void instr_addiu(const string &mc)
+    {
+    }
+    static void instr_and(const string &mc)
+    {
+    }
+    static void instr_andi(const string &mc)
+    {
+    }
+    static void instr_clo(const string &mc)
+    {
+    }
+    static void instr_clz(const string &mc)
+    {
+    }
+    static void instr_div(const string &mc)
+    {
+    }
+    static void instr_divu(const string &mc)
+    {
+    }
+    static void instr_mult(const string &mc)
+    {
+    }
+    static void instr_multu(const string &mc)
+    {
+    }
+    static void instr_mul(const string &mc)
+    {
+    }
+    static void instr_madd(const string &mc)
+    {
+    }
+    static void instr_msub(const string &mc)
+    {
+    }
+    static void instr_maddu(const string &mc)
+    {
+    }
+    static void instr_msubu(const string &mc)
+    {
+    }
+    static void instr_nor(const string &mc)
+    {
+    }
+    static void instr_or(const string &mc)
+    {
+    }
+    static void instr_ori(const string &mc)
+    {
+    }
+    static void instr_sll(const string &mc)
+    {
+    }
+    static void instr_sllv(const string &mc)
+    {
+    }
+    static void instr_sra(const string &mc)
+    {
+    }
+    static void instr_srav(const string &mc)
+    {
+    }
+    static void instr_srl(const string &mc)
+    {
+    }
+    static void instr_srlv(const string &mc)
+    {
+    }
+    static void instr_sub(const string &mc)
+    {
+    }
+    static void instr_subu(const string &mc)
+    {
+    }
+    static void instr_xor(const string &mc)
+    {
+    }
+    static void instr_xori(const string &mc)
+    {
+    }
+    static void instr_lui(const string &mc)
+    {
+    }
+    static void instr_slt(const string &mc)
+    {
+    }
+    static void instr_sltu(const string &mc)
+    {
+    }
+    static void instr_slti(const string &mc)
+    {
+    }
+    static void instr_sltiu(const string &mc)
+    {
+    }
+    static void instr_beq(const string &mc)
+    {
+    }
+    static void instr_bgez(const string &mc)
+    {
+    }
+    static void instr_bgezal(const string &mc)
+    {
+    }
+    static void instr_bgtz(const string &mc)
+    {
+    }
+    static void instr_blez(const string &mc)
+    {
+    }
+    static void instr_bltzal(const string &mc)
+    {
+    }
+    static void instr_bltz(const string &mc)
+    {
+    }
+    static void instr_bne(const string &mc)
+    {
+    }
+    static void instr_j(const string &mc)
+    {
+    }
+    static void instr_jal(const string &mc)
+    {
+    }
+    static void instr_jalr(const string &mc)
+    {
+    }
+    static void instr_jr(const string &mc)
+    {
+    }
+    static void instr_teq(const string &mc)
+    {
+    }
+    static void instr_teqi(const string &mc)
+    {
+    }
+    static void instr_tne(const string &mc)
+    {
+    }
+    static void instr_tnei(const string &mc)
+    {
+    }
+    static void instr_tge(const string &mc)
+    {
+    }
+    static void instr_tgeu(const string &mc)
+    {
+    }
+    static void instr_tgei(const string &mc)
+    {
+    }
+    static void instr_tgeiu(const string &mc)
+    {
+    }
+    static void instr_tlt(const string &mc)
+    {
+    }
+    static void instr_tltu(const string &mc)
+    {
+    }
+    static void instr_tlti(const string &mc)
+    {
+    }
+    static void instr_tltiu(const string &mc)
+    {
+    }
+    static void instr_lb(const string &mc)
+    {
+    }
+    static void instr_lbu(const string &mc)
+    {
+    }
+    static void instr_lh(const string &mc)
+    {
+    }
+    static void instr_lhu(const string &mc)
+    {
+    }
+    static void instr_lw(const string &mc)
+    {
+    }
+    static void instr_lwl(const string &mc)
+    {
+    }
+    static void instr_lwr(const string &mc)
+    {
+    }
+    static void instr_ll(const string &mc)
+    {
+    }
+    static void instr_sb(const string &mc)
+    {
+    }
+    static void instr_sh(const string &mc)
+    {
+    }
+    static void instr_sw(const string &mc)
+    {
+    }
+    static void instr_swl(const string &mc)
+    {
+    }
+    static void instr_swr(const string &mc)
+    {
+    }
+    static void instr_sc(const string &mc)
+    {
+    }
+    static void instr_mfhi(const string &mc)
+    {
+    }
+    static void instr_mflo(const string &mc)
+    {
+    }
+    static void instr_mthi(const string &mc)
+    {
+    }
+    static void instr_mtlo(const string &mc)
+    {
+    }
+    static void instr_syscall(const string &mc)
+    {
+    }
+};
+void Simulator::gen_opcode_to_func()
+{
+    /*
+    Except for R instructions
+    */
+    opcode_to_func.emplace("001000", instr_addi);
+}
+void Simulator::gen_Rfunc_to_func()
+{
+    /*
+    for R instructions only
+    */
+}
+void Simulator::exec_instr(const string &mc)
+{
+    // opcode + func
+    string opcode = mc.substr(0, 6);
+    if (opcode == "000000")
+    {
+        string func = mc.substr(mc.size() - 6, 6);
+        auto it = Rfunc_to_func.find(opcode);
+        if (it == Rfunc_to_func.end())
+        {
+            cout << "function not found!" << endl;
+        }
+        (it->second)(mc);
+    }
+    else
+    {
+        auto it = opcode_to_func.find(opcode);
+        if (it == opcode_to_func.end())
+        {
+            cout << "function not found!" << endl;
+        }
+        (it->second)(mc);
+    }
+}
+size_t Simulator::memmap(uint32_t vm)
+{
+    return (vm - base_vm) / 4;
+}
+void Simulator::init_reg_value()
+{
+    size_t sp_idx = 29;
+    reg[sp_idx] = 0xa00000;
+}
+void Simulator::store_text()
+{
+    size_t i;
+    for (i = 0; i < output.size(); i++)
+    {
+        string s = output[i];
+        if (s.find(".text") != string::npos)
+        {
+            ++i;
+            break;
+        }
+    }
+    for (i; i < output.size(); i++)
+    {
+        memory[text_end_idx++] = output[i];
+    }
+}
+void Simulator::simulate()
+{
+    gen_regcode_to_idx();
+    gen_opcode_to_func();
+    init_reg_value();
+    store_static_data();
+    store_text();
+    // start simulating
+    uint32_t pc = base_vm;
+#ifdef DEBUG_SIM
+    exec_instr("00100000100001000000000000000001");
+#endif
+    while (!memory[memmap(pc)].empty())
+    {
+        exec_instr(memory[memmap(pc)]);
+        pc += 4;
+    }
+}
+void Simulator::gen_regcode_to_idx()
+{
+    for (size_t i = 0; i < reg_size; i++)
+    {
+        string s = bitset<5>(i).to_string();
+        regcode_to_idx[s] = i;
+    }
+}
+void Simulator::store_static_data()
+{
+    for (size_t i = 1; i < output.size(); i++)
+    {
+        string s = output[i];
+        while (s.find(".text") == string::npos)
+        {
+            memory[dynamic_st_idx++] = s;
+            s = output[++i];
+        }
+        break;
+    }
+}
 int main(int argc, char *argv[])
 {
     Assembler assembler;
+    Simulator simulator(assembler.output);
+#ifdef DEBUG_SIM
+
+#endif
     if (argc == 1)
     {
         assembler.scanner.scan(cin);
         assembler.parser.parse();
-        assembler.parser.print_machine_code(cout);
+        simulator.simulate();
     }
     else if (argc == 2)
     {
-        ifstream filein(argv[1]);
-        if (!filein.is_open())
+        ifstream asmin(argv[1]);
+        if (!asmin.is_open())
         {
             cout << argv[1] << "can not open" << endl;
             return 0;
         }
-        assembler.scanner.scan(filein);
+        assembler.scanner.scan(asmin);
         assembler.parser.parse();
         assembler.parser.print_machine_code(cout);
     }
     else if (argc == 3)
     {
-        ifstream filein(argv[1]);
+        ifstream asmin(argv[1]);
         ofstream fileout(argv[2]);
-        if (!filein.is_open())
+        if (!asmin.is_open())
         {
             cout << argv[1] << "can not open" << endl;
             return 0;
@@ -962,10 +1346,33 @@ int main(int argc, char *argv[])
             cout << argv[2] << "can not open" << endl;
             return 0;
         }
-        assembler.scanner.scan(filein);
+        assembler.scanner.scan(asmin);
         assembler.parser.parse();
         assembler.parser.print_machine_code(fileout);
     }
-
+    else if (argc == 4)
+    {
+        ifstream asmin(argv[1]);
+        ifstream filein(argv[2]);
+        ofstream fileout(argv[3]);
+        if (!asmin.is_open())
+        {
+            cout << argv[1] << "can not open" << endl;
+            return 0;
+        }
+        if (!filein.is_open())
+        {
+            cout << argv[2] << "can not open" << endl;
+            return 0;
+        }
+        if (!fileout.is_open())
+        {
+            cout << argv[3] << "can not open" << endl;
+            return 0;
+        }
+        assembler.scanner.scan(asmin);
+        assembler.parser.parse();
+        simulator.simulate();
+    }
     return 0;
 }

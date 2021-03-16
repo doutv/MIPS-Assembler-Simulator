@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <fstream>
 using namespace std;
-
+                                       
 int main()
 {
     cout << sizeof(".word") << endl;
