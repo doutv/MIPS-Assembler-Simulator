@@ -2,6 +2,10 @@
 // #define DEBUG_DATA
 #define DEBUG_SIM
 
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <functional>
 #include <bitset>
 #include <iostream>
@@ -353,7 +357,7 @@ void Assembler::Parser::find_label()
             while (st < s.size() && s[st] == ' ')
                 ++st;
             string label = s.substr(st, i - st);
-            label_to_addr[label] = label_pc;
+            label_to_addr.emplace(label, label_pc);
         }
         label_pc += 4;
     }
@@ -438,25 +442,33 @@ string Assembler::Parser::get_register_code(const string &r)
 }
 int Assembler::Parser::get_op_type(const string &op)
 {
-    if (op == "eret" || op == "syscall" || op == "break" || op == "nop")
+    // 1 O
+    if (op == "syscall")
         return O_type;
+    // 39 R
     else if (op == "add" || op == "addu" || op == "sub" || op == "subu" ||
              op == "and" || op == "or" || op == "xor" || op == "nor" ||
              op == "slt" || op == "sltu" || op == "sll" || op == "srl" ||
              op == "sra" || op == "sllv" || op == "srlv" || op == "srav" ||
              op == "jr" || op == "div" || op == "divu" || op == "mult" ||
              op == "multu" || op == "jalr" || op == "mtlo" || op == "mthi" ||
-             op == "mfhi" || op == "mflo")
+             op == "mfhi" || op == "mflo" || op == "mul" || op == "madd" ||
+             op == "msub" || op == "maddu" || op == "msubu" || op == "teq" ||
+             op == "tne" || op == "tge" || op == "tgeu" || op == "tlt" ||
+             op == "tltu" || op == "clo" || op == "clz")
         return R_type;
-
+    // 36 I
     else if (op == "addi" || op == "addiu" || op == "andi" || op == "ori" ||
              op == "xori" || op == "lui" || op == "lw" || op == "sw" ||
              op == "beq" || op == "bne" || op == "slti" || op == "sltiu" ||
              op == "lb" || op == "lbu" || op == "lh" || op == "lhu" ||
              op == "sb" || op == "sh" || op == "blez" || op == "bltz" ||
              op == "bgez" || op == "bgtz" || op == "lwl" || op == "lwr" ||
-             op == "swl" || op == "swr")
+             op == "swl" || op == "swr" || op == "ll" || op == "sc" ||
+             op == "bgezal" || op == "bltzal" || op == "teqi" || op == "tnei" ||
+             op == "tgei" || op == "tgeiu" || op == "tlti" || op == "tltiu")
         return I_type;
+    // 2 J
     else if (op == "j" || op == "jal")
         return J_type;
     else
@@ -530,19 +542,8 @@ void Assembler::Parser::parse()
 string Assembler::Parser::get_O_instruction(const string &op)
 {
     string machine_code;
-    if (op == "nop")
-        machine_code = "00000000000000000000000000000000";
-    else if (op == "eret")
-        machine_code = "01000010000000000000000000011000";
-    else if (op == "syscall")
+    if (op == "syscall")
         machine_code = "00000000000000000000000000001100";
-    else if (op == "break")
-    {
-        string temp;
-        temp = get_next_token();
-        temp = zero_extent(temp, 20);
-        machine_code = "000000" + temp + "001101";
-    }
     return machine_code;
 }
 
@@ -566,13 +567,13 @@ string Assembler::Parser::get_R_instruction(const string &op)
         Therefore, for add $t0, $t1, $t2, we have:
         000000 01001 01010 01000 00000 100000
     */
-    string opcode, rd, rs, rt, shamt, func;
+    string opcode, rd, rs, rt, shamt, funct;
     string temp;
     opcode = "000000";
     // op rd rs rt
     if (op == "add" || op == "addu" || op == "sub" || op == "subu" ||
         op == "and" || op == "or" || op == "xor" || op == "nor" ||
-        op == "slt" || op == "sltu")
+        op == "slt" || op == "sltu" || op == "mul")
     {
         temp = get_next_token();
         rd = get_register_code(temp);
@@ -586,27 +587,30 @@ string Assembler::Parser::get_R_instruction(const string &op)
         shamt = "00000";
 
         if (op == "add")
-            func = "100000";
+            funct = "100000";
         else if (op == "addu")
-            func = "100001";
+            funct = "100001";
         else if (op == "sub")
-            func = "100010";
+            funct = "100010";
         else if (op == "subu")
-            func = "100011";
+            funct = "100011";
         else if (op == "and")
-            func = "100100";
+            funct = "100100";
         else if (op == "or")
-            func = "100101";
+            funct = "100101";
         else if (op == "xor")
-            func = "100110";
+            funct = "100110";
         else if (op == "nor")
-            func = "100111";
+            funct = "100111";
         else if (op == "slt")
-            func = "101010";
+            funct = "101010";
         else if (op == "sltu")
-            func = "101011";
-        else
-            ;
+            funct = "101011";
+        else if (op == "mul")
+        {
+            opcode = "011100";
+            funct = "000010";
+        }
     }
 
     // op rd rt rs
@@ -624,17 +628,20 @@ string Assembler::Parser::get_R_instruction(const string &op)
         shamt = "00000";
 
         if (op == "sllv")
-            func = "000100";
+            funct = "000100";
         else if (op == "srlv")
-            func = "000110";
+            funct = "000110";
         else if (op == "srav")
-            func = "000111";
+            funct = "000111";
         else
             ;
     }
 
     // op rs rt
-    else if (op == "mult" || op == "multu" || op == "div" || op == "divu")
+    else if (op == "mult" || op == "multu" || op == "div" || op == "divu" ||
+             op == "madd" || op == "msub" || op == "maddu" || op == "msubu" ||
+             op == "teq" || op == "tne" || op == "tge" || op == "tgeu" ||
+             op == "tlt" || op == "tltu")
     {
         temp = get_next_token();
         rs = get_register_code(temp);
@@ -647,15 +654,57 @@ string Assembler::Parser::get_R_instruction(const string &op)
         shamt = "00000";
 
         if (op == "mult")
-            func = "011000";
+            funct = "011000";
         else if (op == "multu")
-            func = "011001";
+            funct = "011001";
         else if (op == "div")
-            func = "011010";
+            funct = "011010";
         else if (op == "divu")
-            func = "011011";
-        else
-            ;
+            funct = "011011";
+        else if (op == "madd")
+        {
+            opcode = "011100";
+            funct = "000000";
+        }
+        else if (op == "msub")
+        {
+            opcode = "011100";
+            funct = "000100";
+        }
+        else if (op == "maddu")
+        {
+            opcode = "011100";
+            funct = "000001";
+        }
+        else if (op == "msubu")
+        {
+            opcode = "011100";
+            funct = "000101";
+        }
+        else if (op == "teq")
+        {
+            funct = "110100";
+        }
+        else if (op == "tne")
+        {
+            funct = "110110";
+        }
+        else if (op == "tge")
+        {
+            funct = "110000";
+        }
+        else if (op == "tgeu")
+        {
+            funct = "110001";
+        }
+        else if (op == "tlt")
+        {
+            funct = "110010";
+        }
+        else if (op == "tltu")
+        {
+            funct = "110011";
+        }
     }
 
     // op rs rd
@@ -670,7 +719,7 @@ string Assembler::Parser::get_R_instruction(const string &op)
         shamt = "00000";
         rt = "00000";
 
-        func = "001001";
+        funct = "001001";
     }
 
     // op rd rt shamt
@@ -685,11 +734,11 @@ string Assembler::Parser::get_R_instruction(const string &op)
         shamt = zero_extent(shamt, 5);
 
         if (op == "sll")
-            func = "000000";
+            funct = "000000";
         else if (op == "sra")
-            func = "000011";
+            funct = "000011";
         else if (op == "srl")
-            func = "000010";
+            funct = "000010";
         else
             ;
     }
@@ -704,11 +753,11 @@ string Assembler::Parser::get_R_instruction(const string &op)
         shamt = "00000";
 
         if (op == "mthi")
-            func = "010001";
+            funct = "010001";
         else if (op == "mtlo")
-            func = "010011";
+            funct = "010011";
         else if (op == "jr")
-            func = "001000";
+            funct = "001000";
         else
             ;
     }
@@ -723,13 +772,27 @@ string Assembler::Parser::get_R_instruction(const string &op)
         shamt = "00000";
 
         if (op == "mfhi")
-            func = "010000";
+            funct = "010000";
         else if (op == "mflo")
-            func = "010010";
+            funct = "010010";
         else
             ;
     }
-    string machine_code = opcode + rs + rt + rd + shamt + func;
+
+    // op rd rs
+    else if (op == "clo" || op == "clz")
+    {
+        temp = get_next_token();
+        rd = get_register_code(temp);
+        temp = get_next_token();
+        rs = get_register_code(temp);
+
+        if (op == "clo")
+            funct = "100001";
+        else if (op == "clz")
+            funct = "100000";
+    }
+    string machine_code = opcode + rs + rt + rd + shamt + funct;
     return machine_code;
 }
 
@@ -757,10 +820,14 @@ string Assembler::Parser::get_I_instruction(const string &op)
         rt = get_register_code(temp);
 
         temp = get_next_token();
-        addr = label_to_addr[temp];
-        addr = (addr - (pc + 4)) / 4;
-        temp = to_string(addr);
-        imme = zero_extent(temp, 16);
+        if (label_to_addr.find(temp) != label_to_addr.end())
+        {
+            addr = label_to_addr[temp];
+            addr = (addr - (pc + 4)) / 4; // compute offset
+            imme = zero_extent(to_string(addr), 16);
+        }
+        else
+            imme = zero_extent(temp, 16);
 
         if (op == "beq")
             opcode = "000100";
@@ -803,7 +870,7 @@ string Assembler::Parser::get_I_instruction(const string &op)
     // op rt imme(rs)
     else if (op == "lw" || op == "sw" || op == "lb" || op == "lbu" || op == "lh" ||
              op == "lhu" || op == "sb" || op == "sb" || op == "sh" || op == "lwl" ||
-             op == "lwr" || op == "swl" || op == "swr")
+             op == "lwr" || op == "swl" || op == "swr" || op == "ll" || op == "sc")
     {
         temp = get_next_token();
         rt = get_register_code(temp);
@@ -839,6 +906,10 @@ string Assembler::Parser::get_I_instruction(const string &op)
             opcode = "101010";
         else if (op == "swr")
             opcode = "101110";
+        else if (op == "ll")
+            opcode = "110000";
+        else if (op == "sc")
+            opcode = "111000";
     }
 
     // op rt imme
@@ -856,15 +927,23 @@ string Assembler::Parser::get_I_instruction(const string &op)
     }
 
     // op rs imme
-    else if (op == "blez" || op == "bltz" || op == "bgtz" || op == "bgez")
+    else if (op == "blez" || op == "bltz" || op == "bgtz" || op == "bgez" ||
+             op == "bgezal" || op == "bltzal" || op == "teqi" || op == "tnei" ||
+             op == "tgei" || op == "tgeiu" || op == "tlti" || op == "tltiu")
+
     {
         temp = get_next_token();
         rs = get_register_code(temp);
 
         temp = get_next_token();
-        addr = label_to_addr[temp];
-        addr = (addr - (pc + 4)) / 4; // compute offset
-        imme = zero_extent(to_string(addr), 16);
+        if (label_to_addr.find(temp) != label_to_addr.end())
+        {
+            addr = label_to_addr[temp];
+            addr = (addr - (pc + 4)) / 4; // compute offset
+            imme = zero_extent(to_string(addr), 16);
+        }
+        else
+            imme = zero_extent(temp, 16);
 
         if (op == "bgez")
         {
@@ -886,9 +965,46 @@ string Assembler::Parser::get_I_instruction(const string &op)
             opcode = "000001";
             rt = "00000";
         }
-
-        else
-            ;
+        else if (op == "bgezal")
+        {
+            opcode = "000001";
+            rt = "10001";
+        }
+        else if (op == "bltzal")
+        {
+            opcode = "000001";
+            rt = "10000";
+        }
+        else if (op == "teqi")
+        {
+            opcode = "000001";
+            rt = "01100";
+        }
+        else if (op == "tnei")
+        {
+            opcode = "000001";
+            rt = "01110";
+        }
+        else if (op == "tgei")
+        {
+            opcode = "000001";
+            rt = "01000";
+        }
+        else if (op == "tgeiu")
+        {
+            opcode = "000001";
+            rt = "01001";
+        }
+        else if (op == "tlti")
+        {
+            opcode = "000001";
+            rt = "01010";
+        }
+        else if (op == "tltiu")
+        {
+            opcode = "000001";
+            rt = "01011";
+        }
     }
     string machine_code = opcode + rs + rt + imme;
     return machine_code;
@@ -915,10 +1031,14 @@ string Assembler::Parser::get_J_instruction(const string &op)
         ;
 
     target = get_next_token();
-    addr = label_to_addr[target];
-    addr >>= 2;
-    target = to_string(addr);
-    target = zero_extent(target, 26);
+    if (label_to_addr.find(target) != label_to_addr.end())
+    {
+        addr = label_to_addr[target];
+        addr >>= 2;
+        target = zero_extent(to_string(addr), 26);
+    }
+    else
+        target = zero_extent(target, 26);
 
     string machine_code = opcode + target;
     return machine_code;
@@ -944,14 +1064,15 @@ public:
     text_st_idx = 0
     */
     static const uint32_t base_vm = 0x400000;
-    static const size_t memory_size = 6000;
-    string memory[memory_size]; // 4bytes for each element
+    static const size_t memory_size = 6 * 1024; // 6MB
+    static string memory[memory_size];          // 4bytes for each element
     static const size_t reg_size = 32;
-    uint32_t reg[reg_size];
-    size_t text_end_idx;
-    const size_t static_st_idx = 1000;
-    size_t dynamic_st_idx;
-    const size_t stack_end_idx = memory_size;
+    static int32_t reg[reg_size];
+    static size_t text_end_idx;
+    static const size_t static_st_idx = 1000;
+    static size_t dynamic_st_idx;
+    static size_t dynamic_end_idx;
+    static const size_t stack_end_idx = memory_size;
     unordered_map<string, size_t> regcode_to_idx;
     const vector<string> &input;
     vector<string> output;
@@ -961,14 +1082,17 @@ public:
     void init_reg_value();
     void store_text();
     void simulate();
-    size_t memmap(uint32_t vm);
+    static pair<size_t, size_t> memmap(uint32_t vm);
+    static void store_byte_to_memory(string &s, uint32_t addr);
     Simulator(vector<string> &input_) : input(input_) {}
 
     unordered_map<string, function<void(const string &)>> opcode_to_func;
-    unordered_map<string, function<void(const string &)>> Rfunc_to_func;
+    unordered_map<string, function<void(const string &)>> opcode_funct_to_func;
+    unordered_map<string, function<void(const string &)>> rt_to_func;
     void exec_instr(const string &mc);
     void gen_opcode_to_func();
-    void gen_Rfunc_to_func();
+    void gen_opcode_funct_to_func();
+    void gen_rt_to_func();
     // lots of instruction functions
     static void instr_add(const string &mc)
     {
@@ -978,6 +1102,7 @@ public:
     }
     static void instr_addi(const string &mc)
     {
+        cout << "addi:" << mc << endl;
     }
     static void instr_addiu(const string &mc)
     {
@@ -1195,7 +1320,7 @@ public:
     static void instr_mflo(const string &mc)
     {
     }
-    static void instr_mthi(const string &mc)
+    static void instr_mthi(const string &
     {
     }
     static void instr_mtlo(const string &mc)
@@ -1203,30 +1328,217 @@ public:
     }
     static void instr_syscall(const string &mc)
     {
+        const size_t v0_idx = 2;
+        const size_t a0_idx = 4;
+        const size_t a1_idx = 5;
+        const size_t a2_idx = 6;
+        switch (reg[v0_idx])
+        {
+        case 1: // print_int
+            printf("%d", reg[a0_idx]);
+            break;
+        case 4: // print_string
+            printf("%s", reg[a0_idx]);
+            break;
+        case 5: // read_int
+            cin >> reg[v0_idx];
+            break;
+        case 8: // read_string
+            uint32_t addr = reg[a0_idx];
+            size_t len = reg[a1_idx];
+            for (size_t i = 0; i < len; i++)
+            {
+                char ch = getchar();
+                if (ch == '\0')
+                {
+                }
+                // convert char to string with size=8
+                string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
+                store_byte_to_memory(s, addr++);
+            }
+            break;
+        case 9: // sbrk
+            dynamic_end_idx += reg[a0_idx];
+            reg[v0_idx] = reinterpret_cast<int32_t>(sbrk(reg[a0_idx]));
+            break;
+        case 10: // exit
+            exit(0);
+            break;
+        case 11: // print_char
+            printf("%c", reg[a0_idx]);
+            break;
+        case 12: // read_char
+            scanf("%c", &reg[v0_idx]);
+            break;
+        case 13: // open
+            const char *filename = to_string(reg[a0_idx]).c_str();
+            reg[v0_idx] = open(filename, reg[a1_idx], reg[a2_idx]);
+            break;
+        case 14: // read
+            reg[v0_idx] = read(reg[a0_idx], (void *)(reg[a1_idx]), reg[a2_idx]);
+            break;
+        case 15: // write
+            reg[v0_idx] = write(reg[a0_idx], (const void *)reg[a1_idx], reg[a2_idx]);
+            break;
+        case 16:
+            close(reg[a0_idx]);
+            break;
+        case 17:
+            exit(reg[a0_idx]);
+            break;
+        default:
+            break;
+        }
     }
 };
+void Simulator::store_byte_to_memory(string &s, uint32_t addr)
+{
+    /*
+    @string s: s.size()=8
+    store one byte string (size=8) to memory
+    */
+    const size_t byte_len = 8;
+    size_t idx = memmap(addr).first;
+    size_t offset = memmap(addr).second;
+    if (memory[idx].size() && memory[idx].size() >= offset * byte_len)
+        memory[idx].replace(offset, byte_len, s);
+    else
+        memory[idx] += s;
+}
 void Simulator::gen_opcode_to_func()
 {
     /*
-    Except for R instructions
+    Some I and J instructions 
+    opcode -> instr_func
+    Total 28
     */
+    // 26 I instructions
+    opcode_to_func.emplace("000100", instr_beq);
+    opcode_to_func.emplace("000101", instr_bne);
     opcode_to_func.emplace("001000", instr_addi);
+    opcode_to_func.emplace("001001", instr_addiu);
+    opcode_to_func.emplace("001100", instr_andi);
+    opcode_to_func.emplace("001101", instr_ori);
+    opcode_to_func.emplace("001110", instr_xori);
+    opcode_to_func.emplace("001010", instr_slti);
+    opcode_to_func.emplace("001011", instr_sltiu);
+    opcode_to_func.emplace("100011", instr_lw);
+    opcode_to_func.emplace("101011", instr_sw);
+    opcode_to_func.emplace("100000", instr_lb);
+    opcode_to_func.emplace("100100", instr_lbu);
+    opcode_to_func.emplace("100001", instr_lh);
+    opcode_to_func.emplace("100101", instr_lhu);
+    opcode_to_func.emplace("101000", instr_sb);
+    opcode_to_func.emplace("101001", instr_sh);
+    opcode_to_func.emplace("100010", instr_lwl);
+    opcode_to_func.emplace("100110", instr_lwr);
+    opcode_to_func.emplace("101010", instr_swl);
+    opcode_to_func.emplace("101110", instr_swr);
+    opcode_to_func.emplace("001111", instr_lui);
+    opcode_to_func.emplace("110000", instr_ll);
+    opcode_to_func.emplace("111000", instr_sc);
+    opcode_to_func.emplace("000111", instr_bgtz);
+    opcode_to_func.emplace("000110", instr_blez);
+    // 2 J instructions
+    opcode_to_func.emplace("000010", instr_j);
+    opcode_to_func.emplace("000011", instr_jal);
 }
-void Simulator::gen_Rfunc_to_func()
+void Simulator::gen_rt_to_func()
 {
     /*
-    for R instructions only
+    special I instructions with opcode=000001
+    rt -> instr_func
+    Total 10
     */
+    // 10 special I instructions with opcode=000001
+    rt_to_func.emplace("00000", instr_bltz);
+    rt_to_func.emplace("00001", instr_bgez);
+    rt_to_func.emplace("10001", instr_bgezal);
+    rt_to_func.emplace("10000", instr_bltzal);
+    rt_to_func.emplace("01100", instr_teqi);
+    rt_to_func.emplace("01110", instr_tnei);
+    rt_to_func.emplace("01000", instr_tgei);
+    rt_to_func.emplace("01001", instr_tgeiu);
+    rt_to_func.emplace("01010", instr_tlti);
+    rt_to_func.emplace("01011", instr_tltiu);
+}
+void Simulator::gen_opcode_funct_to_func()
+{
+    /*
+    R instructions only
+    opcode+funct -> instr_func
+    Total 38
+    */
+    // 39 R instructions
+    opcode_funct_to_func.emplace("000000100000", instr_add);
+    opcode_funct_to_func.emplace("000000100001", instr_addu);
+    opcode_funct_to_func.emplace("000000100010", instr_sub);
+    opcode_funct_to_func.emplace("000000100011", instr_subu);
+    opcode_funct_to_func.emplace("000000100100", instr_and);
+    opcode_funct_to_func.emplace("000000100101", instr_or);
+    opcode_funct_to_func.emplace("000000100110", instr_xor);
+    opcode_funct_to_func.emplace("000000100111", instr_nor);
+    opcode_funct_to_func.emplace("000000101010", instr_slt);
+    opcode_funct_to_func.emplace("000000101011", instr_sltu);
+    opcode_funct_to_func.emplace("000000000100", instr_sllv);
+    opcode_funct_to_func.emplace("000000000110", instr_srlv);
+    opcode_funct_to_func.emplace("000000000111", instr_srav);
+    opcode_funct_to_func.emplace("000000011000", instr_mult);
+    opcode_funct_to_func.emplace("000000011001", instr_multu);
+    opcode_funct_to_func.emplace("000000011010", instr_div);
+    opcode_funct_to_func.emplace("000000011011", instr_divu);
+    opcode_funct_to_func.emplace("000000001001", instr_jalr);
+    opcode_funct_to_func.emplace("000000000000", instr_sll);
+    opcode_funct_to_func.emplace("000000000011", instr_sra);
+    opcode_funct_to_func.emplace("000000000010", instr_srl);
+    opcode_funct_to_func.emplace("000000010001", instr_mthi);
+    opcode_funct_to_func.emplace("000000010011", instr_mtlo);
+    opcode_funct_to_func.emplace("000000001000", instr_jr);
+    opcode_funct_to_func.emplace("000000010000", instr_mfhi);
+    opcode_funct_to_func.emplace("000000010010", instr_mflo);
+    opcode_funct_to_func.emplace("000000110100", instr_teq);
+    opcode_funct_to_func.emplace("000000110110", instr_tne);
+    opcode_funct_to_func.emplace("000000110000", instr_tge);
+    opcode_funct_to_func.emplace("000000110001", instr_tgeu);
+    opcode_funct_to_func.emplace("000000110010", instr_tlt);
+    opcode_funct_to_func.emplace("000000110011", instr_tltu);
+    opcode_funct_to_func.emplace("000000100001", instr_clo);
+    opcode_funct_to_func.emplace("000000100000", instr_clz);
+
+    opcode_funct_to_func.emplace("011100000010", instr_mul);
+    opcode_funct_to_func.emplace("011100000000", instr_madd);
+    opcode_funct_to_func.emplace("011100000100", instr_msub);
+    opcode_funct_to_func.emplace("011100000001", instr_maddu);
+    opcode_funct_to_func.emplace("011100000101", instr_msubu);
 }
 void Simulator::exec_instr(const string &mc)
 {
-    // opcode + func
-    string opcode = mc.substr(0, 6);
-    if (opcode == "000000")
+    const string syscall = "00000000000000000000000000001100";
+    if (mc == syscall)
     {
-        string func = mc.substr(mc.size() - 6, 6);
-        auto it = Rfunc_to_func.find(opcode);
-        if (it == Rfunc_to_func.end())
+        instr_syscall(mc);
+        return;
+    }
+    string opcode = mc.substr(0, 6);
+    const string R_opcode[2] = {"000000", "011100"};
+    const string Ispecial_opcode = "000001";
+    if (opcode == R_opcode[0] || opcode == R_opcode[1])
+    {
+        // R instructions
+        string funct = mc.substr(mc.size() - 6, 6);
+        auto it = opcode_funct_to_func.find(opcode + funct);
+        if (it == opcode_funct_to_func.end())
+        {
+            cout << "function not found!" << endl;
+        }
+        (it->second)(mc);
+    }
+    else if (opcode == Ispecial_opcode)
+    {
+        // special I instructions with opcode=000001
+        string rt = mc.substr(11, 5);
+        auto it = rt_to_func.find(rt);
+        if (it == rt_to_func.end())
         {
             cout << "function not found!" << endl;
         }
@@ -1234,6 +1546,7 @@ void Simulator::exec_instr(const string &mc)
     }
     else
     {
+        // Some I and J instructions
         auto it = opcode_to_func.find(opcode);
         if (it == opcode_to_func.end())
         {
@@ -1242,9 +1555,14 @@ void Simulator::exec_instr(const string &mc)
         (it->second)(mc);
     }
 }
-size_t Simulator::memmap(uint32_t vm)
+pair<size_t, size_t> Simulator::memmap(uint32_t vm)
 {
-    return (vm - base_vm) / 4;
+    /*
+    idx: memory[idx] 4byte
+    offset={0,1,2,3}: memory[idx][offset] 1byte
+    @return pair<idx,offset>
+    */
+    return make_pair((vm - base_vm) / 4, (vm - base_vm) % 4);
 }
 void Simulator::init_reg_value()
 {
@@ -1280,9 +1598,9 @@ void Simulator::simulate()
 #ifdef DEBUG_SIM
     exec_instr("00100000100001000000000000000001");
 #endif
-    while (!memory[memmap(pc)].empty())
+    while (!memory[memmap(pc).first].empty())
     {
-        exec_instr(memory[memmap(pc)]);
+        exec_instr(memory[memmap(pc).first]);
         pc += 4;
     }
 }
@@ -1311,9 +1629,6 @@ int main(int argc, char *argv[])
 {
     Assembler assembler;
     Simulator simulator(assembler.output);
-#ifdef DEBUG_SIM
-
-#endif
     if (argc == 1)
     {
         assembler.scanner.scan(cin);
@@ -1330,7 +1645,7 @@ int main(int argc, char *argv[])
         }
         assembler.scanner.scan(asmin);
         assembler.parser.parse();
-        assembler.parser.print_machine_code(cout);
+        simulator.simulate();
     }
     else if (argc == 3)
     {
@@ -1348,7 +1663,7 @@ int main(int argc, char *argv[])
         }
         assembler.scanner.scan(asmin);
         assembler.parser.parse();
-        assembler.parser.print_machine_code(fileout);
+        simulator.simulate();
     }
     else if (argc == 4)
     {
