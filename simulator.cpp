@@ -353,7 +353,7 @@ void Assembler::Parser::find_label()
             while (st < s.size() && s[st] == ' ')
                 ++st;
             string label = s.substr(st, i - st);
-            label_to_addr[label] = label_pc;
+            label_to_addr.emplace(label, label_pc);
         }
         label_pc += 4;
     }
@@ -441,23 +441,28 @@ int Assembler::Parser::get_op_type(const string &op)
     // 1 O
     if (op == "syscall")
         return O_type;
-    // 26 R
+    // 39 R
     else if (op == "add" || op == "addu" || op == "sub" || op == "subu" ||
              op == "and" || op == "or" || op == "xor" || op == "nor" ||
              op == "slt" || op == "sltu" || op == "sll" || op == "srl" ||
              op == "sra" || op == "sllv" || op == "srlv" || op == "srav" ||
              op == "jr" || op == "div" || op == "divu" || op == "mult" ||
              op == "multu" || op == "jalr" || op == "mtlo" || op == "mthi" ||
-             op == "mfhi" || op == "mflo")
+             op == "mfhi" || op == "mflo" || op == "mul" || op == "madd" ||
+             op == "msub" || op == "maddu" || op == "msubu" || op == "teq" ||
+             op == "tne" || op == "tge" || op == "tgeu" || op == "tlt" ||
+             op == "tltu" || op == "clo" || op == "clz")
         return R_type;
-    // 26 I
+    // 36 I
     else if (op == "addi" || op == "addiu" || op == "andi" || op == "ori" ||
              op == "xori" || op == "lui" || op == "lw" || op == "sw" ||
              op == "beq" || op == "bne" || op == "slti" || op == "sltiu" ||
              op == "lb" || op == "lbu" || op == "lh" || op == "lhu" ||
              op == "sb" || op == "sh" || op == "blez" || op == "bltz" ||
              op == "bgez" || op == "bgtz" || op == "lwl" || op == "lwr" ||
-             op == "swl" || op == "swr")
+             op == "swl" || op == "swr" || op == "ll" || op == "sc" ||
+             op == "bgezal" || op == "bltzal" || op == "teqi" || op == "tnei" ||
+             op == "tgei" || op == "tgeiu" || op == "tlti" || op == "tltiu")
         return I_type;
     // 2 J
     else if (op == "j" || op == "jal")
@@ -564,7 +569,7 @@ string Assembler::Parser::get_R_instruction(const string &op)
     // op rd rs rt
     if (op == "add" || op == "addu" || op == "sub" || op == "subu" ||
         op == "and" || op == "or" || op == "xor" || op == "nor" ||
-        op == "slt" || op == "sltu")
+        op == "slt" || op == "sltu" || op == "mul")
     {
         temp = get_next_token();
         rd = get_register_code(temp);
@@ -597,8 +602,11 @@ string Assembler::Parser::get_R_instruction(const string &op)
             funct = "101010";
         else if (op == "sltu")
             funct = "101011";
-        else
-            ;
+        else if (op == "mul")
+        {
+            opcode = "011100";
+            funct = "000010";
+        }
     }
 
     // op rd rt rs
@@ -626,7 +634,10 @@ string Assembler::Parser::get_R_instruction(const string &op)
     }
 
     // op rs rt
-    else if (op == "mult" || op == "multu" || op == "div" || op == "divu")
+    else if (op == "mult" || op == "multu" || op == "div" || op == "divu" ||
+             op == "madd" || op == "msub" || op == "maddu" || op == "msubu" ||
+             op == "teq" || op == "tne" || op == "tge" || op == "tgeu" ||
+             op == "tlt" || op == "tltu")
     {
         temp = get_next_token();
         rs = get_register_code(temp);
@@ -646,8 +657,50 @@ string Assembler::Parser::get_R_instruction(const string &op)
             funct = "011010";
         else if (op == "divu")
             funct = "011011";
-        else
-            ;
+        else if (op == "madd")
+        {
+            opcode = "011100";
+            funct = "000010";
+        }
+        else if (op == "msub")
+        {
+            opcode = "011100";
+            funct = "000100";
+        }
+        else if (op == "maddu")
+        {
+            opcode = "011100";
+            funct = "000001";
+        }
+        else if (op == "msubu")
+        {
+            opcode = "011100";
+            funct = "000101";
+        }
+        else if (op == "teq")
+        {
+            funct = "110100";
+        }
+        else if (op == "tne")
+        {
+            funct = "110110";
+        }
+        else if (op == "tge")
+        {
+            funct = "110000";
+        }
+        else if (op == "tgeu")
+        {
+            funct = "110001";
+        }
+        else if (op == "tlt")
+        {
+            funct = "110010";
+        }
+        else if (op == "tltu")
+        {
+            funct = "110011";
+        }
     }
 
     // op rs rd
@@ -721,6 +774,20 @@ string Assembler::Parser::get_R_instruction(const string &op)
         else
             ;
     }
+
+    // op rd rs
+    else if (op == "clo" || op == "clz")
+    {
+        temp = get_next_token();
+        rd = get_register_code(temp);
+        temp = get_next_token();
+        rs = get_register_code(temp);
+
+        if (op == "clo")
+            funct = "100001";
+        else if (op == "clz")
+            funct = "100000";
+    }
     string machine_code = opcode + rs + rt + rd + shamt + funct;
     return machine_code;
 }
@@ -749,10 +816,14 @@ string Assembler::Parser::get_I_instruction(const string &op)
         rt = get_register_code(temp);
 
         temp = get_next_token();
-        addr = label_to_addr[temp];
-        addr = (addr - (pc + 4)) / 4;
-        temp = to_string(addr);
-        imme = zero_extent(temp, 16);
+        if (label_to_addr.find(temp) != label_to_addr.end())
+        {
+            addr = label_to_addr[temp];
+            addr = (addr - (pc + 4)) / 4; // compute offset
+            imme = zero_extent(to_string(addr), 16);
+        }
+        else
+            imme = zero_extent(temp, 16);
 
         if (op == "beq")
             opcode = "000100";
@@ -795,7 +866,7 @@ string Assembler::Parser::get_I_instruction(const string &op)
     // op rt imme(rs)
     else if (op == "lw" || op == "sw" || op == "lb" || op == "lbu" || op == "lh" ||
              op == "lhu" || op == "sb" || op == "sb" || op == "sh" || op == "lwl" ||
-             op == "lwr" || op == "swl" || op == "swr")
+             op == "lwr" || op == "swl" || op == "swr" || op == "ll" || op == "sc")
     {
         temp = get_next_token();
         rt = get_register_code(temp);
@@ -831,6 +902,10 @@ string Assembler::Parser::get_I_instruction(const string &op)
             opcode = "101010";
         else if (op == "swr")
             opcode = "101110";
+        else if (op == "ll")
+            opcode = "110000";
+        else if (op == "sc")
+            opcode = "111000";
     }
 
     // op rt imme
@@ -848,15 +923,23 @@ string Assembler::Parser::get_I_instruction(const string &op)
     }
 
     // op rs imme
-    else if (op == "blez" || op == "bltz" || op == "bgtz" || op == "bgez")
+    else if (op == "blez" || op == "bltz" || op == "bgtz" || op == "bgez" ||
+             op == "bgezal" || op == "bltzal" || op == "teqi" || op == "tnei" ||
+             op == "tgei" || op == "tgeiu" || op == "tlti" || op == "tltiu")
+
     {
         temp = get_next_token();
         rs = get_register_code(temp);
 
         temp = get_next_token();
-        addr = label_to_addr[temp];
-        addr = (addr - (pc + 4)) / 4; // compute offset
-        imme = zero_extent(to_string(addr), 16);
+        if (label_to_addr.find(temp) != label_to_addr.end())
+        {
+            addr = label_to_addr[temp];
+            addr = (addr - (pc + 4)) / 4; // compute offset
+            imme = zero_extent(to_string(addr), 16);
+        }
+        else
+            imme = zero_extent(temp, 16);
 
         if (op == "bgez")
         {
@@ -878,9 +961,46 @@ string Assembler::Parser::get_I_instruction(const string &op)
             opcode = "000001";
             rt = "00000";
         }
-
-        else
-            ;
+        else if (op == "bgezal")
+        {
+            opcode = "000001";
+            rt = "10001";
+        }
+        else if (op == "bltzal")
+        {
+            opcode = "000001";
+            rt = "10000";
+        }
+        else if (op == "teqi")
+        {
+            opcode = "000001";
+            rt = "01100";
+        }
+        else if (op == "tnei")
+        {
+            opcode = "000001";
+            rt = "01110";
+        }
+        else if (op == "tgei")
+        {
+            opcode = "000001";
+            rt = "01000";
+        }
+        else if (op == "tgeiu")
+        {
+            opcode = "000001";
+            rt = "01001";
+        }
+        else if (op == "tlti")
+        {
+            opcode = "000001";
+            rt = "01010";
+        }
+        else if (op == "tltiu")
+        {
+            opcode = "000001";
+            rt = "01011";
+        }
     }
     string machine_code = opcode + rs + rt + imme;
     return machine_code;
@@ -907,10 +1027,14 @@ string Assembler::Parser::get_J_instruction(const string &op)
         ;
 
     target = get_next_token();
-    addr = label_to_addr[target];
-    addr >>= 2;
-    target = to_string(addr);
-    target = zero_extent(target, 26);
+    if (label_to_addr.find(target) != label_to_addr.end())
+    {
+        addr = label_to_addr[target];
+        addr >>= 2;
+        target = zero_extent(to_string(addr), 26);
+    }
+    else
+        target = zero_extent(target, 26);
 
     string machine_code = opcode + target;
     return machine_code;
@@ -1274,9 +1398,9 @@ void Simulator::exec_instr(const string &mc)
     const string syscall = "00000000000000000000000000001100";
     if (mc == syscall)
     {
-        instr_syscall(mc);
-        return;
     }
+    instr_syscall(mc);
+    return;
     string opcode = mc.substr(0, 6);
     const string R_opcode = "000000";
     if (opcode == R_opcode)
