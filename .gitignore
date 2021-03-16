@@ -1,4 +1,5 @@
 *.test
 assembler
 simulator
+*.zip
 *.t*
