@@ -1,3 +1,8 @@
+// #define DEBUG_ASS
+// #define DEBUG_DATA
+#define DEBUG_SIM
+
+#include <functional>
 #include <bitset>
 #include <iostream>
 #include <algorithm>
@@ -9,55 +14,88 @@
 #include <fstream>
 using namespace std;
 
-// #define DEBUG
-
-class Scanner
+class Assembler
 {
 public:
-    vector<string> file;
     vector<string> data_seg;
     vector<string> text_seg;
-    void get_assembly(istream &in);
-    void remove_comments();
-    void split_data_and_text();
-    void preprocess_text();
-    vector<string> &get_data_seg();
-    vector<string> &get_text_seg();
-    void scan(istream &in);
-    Scanner(){};
+    vector<string> output;
+    class Scanner
+    {
+    public:
+        Assembler &assembler;
+        vector<string> file;
+
+        void get_assembly(istream &in);
+        void remove_comments();
+        void split_data_and_text();
+        void preprocess_text();
+        vector<string> &get_data_seg();
+        vector<string> &get_text_seg();
+        void scan(istream &in);
+        Scanner(Assembler &assembler) : assembler(assembler) {}
+    };
+    class Parser
+    {
+    public:
+        Assembler &assembler;
+        enum optype
+        {
+            O_type,
+            R_type,
+            I_type,
+            J_type,
+            P_type
+        };
+        unordered_map<string, uint32_t> label_to_addr;
+        uint32_t pc = 0x400000;
+        string *cur_string;
+        size_t cur_string_idx;
+
+        string get_R_instruction(const string &op);
+        string get_I_instruction(const string &op);
+        string get_J_instruction(const string &op);
+        string get_O_instruction(const string &op);
+        string get_next_token();
+        string get_register_code(const string &r);
+        string get_ascii_data(const string &data);
+        int get_op_type(const string &op);
+        string zero_extent(const string &s, const size_t target);
+        void process_dataseg();
+        void find_label();
+        void parse();
+        void print_machine_code(ostream &out);
+        Parser(Assembler &assembler) : assembler(assembler) {}
+    };
+    Scanner scanner;
+    Parser parser;
+    Assembler() : scanner(*this), parser(*this) {}
 };
-void Scanner::scan(istream &in)
+
+void Assembler::Scanner::scan(istream &in)
 {
     get_assembly(in);
     remove_comments();
     split_data_and_text();
     preprocess_text();
-#ifdef DEBUG
-    cout << "---data seg---" << endl;
-    for (string &s : data_seg)
-        cout << s << endl;
-    cout << "---end data seg---" << endl;
-    cout << "---text seg---" << endl;
-    for (string &s : text_seg)
-        cout << s << endl;
-    cout << "---end text seg---" << endl;
+#ifdef DEBUG_ASS
+    // cout << "---data seg---" << endl;
+    // for (string &s : assembler.data_seg)
+    //     cout << s << endl;
+    // cout << "---end data seg---" << endl;
+    // cout << "---text seg---" << endl;
+    // for (string &s : assembler.text_seg)
+    //     cout << s << endl;
+    // cout << "---end text seg---" << endl;
 #endif
 }
-vector<string> &Scanner::get_data_seg()
-{
-    return data_seg;
-}
-vector<string> &Scanner::get_text_seg()
-{
-    return text_seg;
-}
-void Scanner::get_assembly(istream &in)
+void Assembler::Scanner::get_assembly(istream &in)
 {
     string s;
     while (getline(in, s))
         file.push_back(s);
 }
-void Scanner::remove_comments()
+void Assembler::Scanner::remove_comments()
 {
     /*
     remove comments and empty lines
@@ -74,7 +112,7 @@ void Scanner::remove_comments()
     }
     file = new_file;
 }
-void Scanner::split_data_and_text()
+void Assembler::Scanner::split_data_and_text()
 {
     /*
     split data and text part
@@ -90,7 +128,7 @@ void Scanner::split_data_and_text()
             {
                 if (file[i].find(".data") != string::npos)
                     break;
-                text_seg.push_back(file[i]);
+                assembler.text_seg.push_back(file[i]);
             }
             --i;
             continue;
@@ -101,14 +139,14 @@ void Scanner::split_data_and_text()
             {
                 if (file[i].find(".text") != string::npos)
                     break;
-                data_seg.push_back(file[i]);
+                assembler.data_seg.push_back(file[i]);
             }
             --i;
             continue;
         }
     }
 }
-void Scanner::preprocess_text()
+void Assembler::Scanner::preprocess_text()
 {
     /*
     将 label 和指令放在同一行
@@ -117,17 +155,17 @@ void Scanner::preprocess_text()
     */
     vector<string> new_text_seg;
     string s;
-    for (size_t i = 0; i < text_seg.size(); i++)
+    for (size_t i = 0; i < assembler.text_seg.size(); i++)
     {
-        s = text_seg[i];
+        s = assembler.text_seg[i];
         if (s.find(':') != string::npos)
         {
             // locate label
             if (s.find_last_not_of(' ') == s.find(':'))
             {
                 // 当前行只有 label:
-                s = text_seg[i].substr(0, s.find(':') + 1);
-                s += text_seg.at(i + 1);
+                s = assembler.text_seg[i].substr(0, s.find(':') + 1);
+                s += assembler.text_seg.at(i + 1);
                 new_text_seg.push_back(s);
                 ++i;
             }
@@ -142,44 +180,9 @@ void Scanner::preprocess_text()
         replace(s.begin(), s.end(), ',', ' ');
         s.erase(remove(s.begin(), s.end(), '\t'), s.end());
     }
-    text_seg = new_text_seg;
+    assembler.text_seg = new_text_seg;
 }
-class Parser
-{
-public:
-    enum optype
-    {
-        O_type,
-        R_type,
-        I_type,
-        J_type,
-        P_type
-    };
-    vector<string> &data_seg;
-    vector<string> &text_seg;
-    vector<string> output;
-    unordered_map<string, uint32_t> label_to_addr;
-    uint32_t pc;
-    string *cur_string;
-    size_t cur_string_idx;
-
-    string get_R_instruction(const string &op);
-    string get_I_instruction(const string &op);
-    string get_J_instruction(const string &op);
-    string get_O_instruction(const string &op);
-
-    string get_next_token();
-    string get_register_code(const string &r);
-    int get_op_type(const string &op);
-    string zero_extent(const string &s, const size_t target);
-    void process_dataseg();
-    void find_label();
-    void parse();
-    void print_machine_code(ostream &out);
-    Parser(vector<string> &in_data_seg, vector<string> &in_text_seg, uint32_t init_pc) : data_seg(in_data_seg), text_seg(in_text_seg), pc(init_pc) {}
-};
-
-string Parser::get_next_token()
+string Assembler::Parser::get_next_token()
 {
     string s = *cur_string;
     size_t st_idx = s.find_first_not_of(' ', cur_string_idx);
@@ -188,13 +191,159 @@ string Parser::get_next_token()
     cur_string_idx = end_idx;
     return res;
 }
-void Parser::process_dataseg()
+string Assembler::Parser::get_ascii_data(const string &data)
 {
+#ifdef DEBUG_DATA
+    cout << data << endl;
+#endif
+    string res;
+    for (size_t i = 0; i < data.size(); i++)
+    {
+        if (data[i] == '\\' && i + 1 < data.size())
+        {
+            switch (data[i + 1])
+            {
+            case 'n':
+                res += bitset<8>((uint8_t)('\n')).to_string();
+                break;
+            case 't':
+                res += bitset<8>((uint8_t)('\t')).to_string();
+                break;
+            case '\'':
+                res += bitset<8>((uint8_t)('\'')).to_string();
+                break;
+            case '\"':
+                res += bitset<8>((uint8_t)('\"')).to_string();
+                break;
+            case '\\':
+                res += bitset<8>((uint8_t)('\\')).to_string();
+                break;
+            default:
+                break;
+            }
+        }
+        else
+        {
+            res += bitset<8>((uint8_t)(data[i])).to_string();
+        }
+    }
+    return res;
 }
-void Parser::find_label()
+void Assembler::Parser::process_dataseg()
+{
+#ifndef DEBUG_ASS
+    assembler.output.push_back(".data");
+#endif
+    for (string &s : assembler.data_seg)
+    {
+        string target_str, tmp;
+        size_t st_idx, end_idx;
+        if (s.find(".asciiz") != string::npos)
+        {
+            // Store the string str in memory and null- terminate it.
+            target_str = ".asciiz";
+            st_idx = s.find(target_str) + target_str.size();
+            st_idx = s.find('\"', st_idx) + 1;
+            end_idx = s.find('\"', st_idx);
+            tmp = s.substr(st_idx, end_idx - st_idx);
+            // add \0 terminator
+            tmp = get_ascii_data(tmp) + bitset<8>(static_cast<unsigned long long>('\0')).to_string();
+            assembler.output.push_back(tmp);
+        }
+        else if (s.find(".ascii") != string::npos)
+        {
+            // Store the string str in memory, but do not nullterminate it.
+            target_str = ".ascii";
+            st_idx = s.find(target_str) + target_str.size();
+            st_idx = s.find('\"', st_idx) + 1;
+            end_idx = s.find('\"', st_idx);
+            tmp = s.substr(st_idx, end_idx - st_idx);
+            assembler.output.push_back(get_ascii_data(tmp));
+        }
+        else if (s.find(".word") != string::npos)
+        {
+            target_str = ".word";
+            st_idx = s.find(target_str) + target_str.size();
+            for (size_t i = st_idx; i < s.size(); i++)
+            {
+                if (s[i] == ' ' || s[i] == ',')
+                    continue;
+                st_idx = i;
+                while (s[i] >= '0' && s[i] <= '9')
+                {
+                    ++i;
+                }
+                string numstr = s.substr(st_idx, i - st_idx);
+                // word: 32bits
+                assembler.output.push_back(zero_extent(numstr, 32));
+            }
+        }
+        else if (s.find(".byte") != string::npos)
+        {
+            string res;
+            target_str = ".byte";
+            st_idx = s.find(target_str) + target_str.size();
+            for (size_t i = st_idx; i < s.size(); i++)
+            {
+                if (s[i] == ' ' || s[i] == ',')
+                    continue;
+                st_idx = i;
+                while (s[i] >= '0' && s[i] <= '9')
+                {
+                    ++i;
+                }
+                string numstr = s.substr(st_idx, i - st_idx);
+                // byte: 8bits
+                res += zero_extent(numstr, 8);
+            }
+            assembler.output.push_back(res);
+        }
+        else if (s.find(".half") != string::npos)
+        {
+            string res;
+            target_str = ".half";
+            st_idx = s.find(target_str) + target_str.size();
+            for (size_t i = st_idx; i < s.size(); i++)
+            {
+                if (s[i] == ' ' || s[i] == ',')
+                    continue;
+                st_idx = i;
+                while (s[i] >= '0' && s[i] <= '9')
+                {
+                    ++i;
+                }
+                string numstr = s.substr(st_idx, i - st_idx);
+                // half: 16bits
+                res += zero_extent(numstr, 16);
+            }
+            assembler.output.push_back(res);
+        }
+    }
+    // 补0或者截断
+    for (size_t i = 0; i < assembler.output.size(); i++)
+    {
+        string s = assembler.output[i];
+        if (s.find(".data") != string::npos)
+            continue;
+        if (s.size() > 32)
+        {
+            while (s.size() > 32)
+            {
+                assembler.output.insert(assembler.output.begin() + i, s.substr(0, 32));
+                ++i;
+                s = s.substr(32, string::npos);
+                if (s.size() <= 32)
+                    assembler.output[i] = s;
+            }
+        }
+        while (assembler.output[i].size() < 32)
+            assembler.output[i].push_back('0');
+    }
+}
+void Assembler::Parser::find_label()
 {
     uint32_t label_pc = pc;
-    for (string &s : text_seg)
+    for (string &s : assembler.text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':');
         if (i)
@@ -208,19 +357,19 @@ void Parser::find_label()
         }
         label_pc += 4;
     }
-#ifdef DEBUG
+#ifdef DEBUG_LABEL
     for (auto &it : label_to_addr)
     {
         cout << it.first << " " << hex << it.second << endl;
     }
 #endif
 }
-void Parser::print_machine_code(ostream &out)
+void Assembler::Parser::print_machine_code(ostream &out)
 {
-    for (string &s : output)
+    for (string &s : assembler.output)
         out << s << endl;
 }
-string Parser::get_register_code(const string &r)
+string Assembler::Parser::get_register_code(const string &r)
 {
     if (r == "$0" || r == "$zero")
         return "00000";
@@ -287,7 +436,7 @@ string Parser::get_register_code(const string &r)
     else
         return "11111";
 }
-int Parser::get_op_type(const string &op)
+int Assembler::Parser::get_op_type(const string &op)
 {
     if (op == "eret" || op == "syscall" || op == "break" || op == "nop")
         return O_type;
@@ -313,7 +462,7 @@ int Parser::get_op_type(const string &op)
     else
         return P_type;
 }
-string Parser::zero_extent(const string &s, const size_t target)
+string Assembler::Parser::zero_extent(const string &s, const size_t target)
 {
     /*
     convert string in decimal to string in binary and add zero to its head
@@ -335,43 +484,42 @@ string Parser::zero_extent(const string &s, const size_t target)
     case 26:
         res = bitset<26>(num).to_string();
         break;
+    case 32:
+        res = bitset<32>(num).to_string();
+        break;
     default:
         break;
     }
     return res;
 }
-void Parser::parse()
+void Assembler::Parser::parse()
 {
     process_dataseg();
     find_label();
-#ifdef DEBUG
-
+#ifndef DEBUG_ASS
+    assembler.output.push_back(".text");
 #endif
-    for (string &s : text_seg)
+    for (string &s : assembler.text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
         cur_string = &s;
         i = s.find_first_not_of(' ', i);
         size_t end_idx = s.find(' ', i) == string::npos ? s.size() : s.find(' ', i);
         string op = s.substr(i, end_idx - i);
-        // #ifdef DEBUG
-        //         if (op == "syscall")
-        //             cout << s << endl;
-        // #endif
         cur_string_idx = s.find(' ', i);
         switch (get_op_type(op))
         {
         case R_type:
-            output.push_back(get_R_instruction(op));
+            assembler.output.push_back(get_R_instruction(op));
             break;
         case I_type:
-            output.push_back(get_I_instruction(op));
+            assembler.output.push_back(get_I_instruction(op));
             break;
         case J_type:
-            output.push_back(get_J_instruction(op));
+            assembler.output.push_back(get_J_instruction(op));
             break;
         case O_type:
-            output.push_back(get_O_instruction(op));
+            assembler.output.push_back(get_O_instruction(op));
             break;
         default:
             break;
@@ -379,7 +527,7 @@ void Parser::parse()
         pc += 4;
     }
 }
-string Parser::get_O_instruction(const string &op)
+string Assembler::Parser::get_O_instruction(const string &op)
 {
     string machine_code;
     if (op == "nop")
@@ -398,7 +546,7 @@ string Parser::get_O_instruction(const string &op)
     return machine_code;
 }
 
-string Parser::get_R_instruction(const string &op)
+string Assembler::Parser::get_R_instruction(const string &op)
 {
     /*
         R-instruction:
@@ -585,7 +733,7 @@ string Parser::get_R_instruction(const string &op)
     return machine_code;
 }
 
-string Parser::get_I_instruction(const string &op)
+string Assembler::Parser::get_I_instruction(const string &op)
 {
     /*
         I-instruction:
@@ -746,7 +894,7 @@ string Parser::get_I_instruction(const string &op)
     return machine_code;
 }
 
-string Parser::get_J_instruction(const string &op)
+string Assembler::Parser::get_J_instruction(const string &op)
 {
     /*
         J-instruction:
@@ -776,34 +924,419 @@ string Parser::get_J_instruction(const string &op)
     return machine_code;
 }
 
+class Simulator
+{
+public:
+    /*
+    Memory structure:
+    stack_st_idx = 6000
+    | <- stack data
+    stack_end_idx
+    | 
+    dynamic_end_idx
+    | <- dynamic data
+    dynamic_st_idx = static_end_idx
+    | <- static data
+    static_st_idx = 1000
+    |
+    text_end_idx
+    | <- text data
+    text_st_idx = 0
+    */
+    static const uint32_t base_vm = 0x400000;
+    static const size_t memory_size = 6000;
+    string memory[memory_size]; // 4bytes for each element
+    static const size_t reg_size = 32;
+    uint32_t reg[reg_size];
+    size_t text_end_idx;
+    const size_t static_st_idx = 1000;
+    size_t dynamic_st_idx;
+    const size_t stack_end_idx = memory_size;
+    unordered_map<string, size_t> regcode_to_idx;
+    const vector<string> &input;
+    vector<string> output;
+
+    void gen_regcode_to_idx();
+    void store_static_data();
+    void init_reg_value();
+    void store_text();
+    void simulate();
+    size_t memmap(uint32_t vm);
+    Simulator(vector<string> &input_) : input(input_) {}
+
+    unordered_map<string, function<void(const string &)>> opcode_to_func;
+    unordered_map<string, function<void(const string &)>> Rfunc_to_func;
+    void exec_instr(const string &mc);
+    void gen_opcode_to_func();
+    void gen_Rfunc_to_func();
+    // lots of instruction functions
+    static void instr_add(const string &mc)
+    {
+    }
+    static void instr_addu(const string &mc)
+    {
+    }
+    static void instr_addi(const string &mc)
+    {
+    }
+    static void instr_addiu(const string &mc)
+    {
+    }
+    static void instr_and(const string &mc)
+    {
+    }
+    static void instr_andi(const string &mc)
+    {
+    }
+    static void instr_clo(const string &mc)
+    {
+    }
+    static void instr_clz(const string &mc)
+    {
+    }
+    static void instr_div(const string &mc)
+    {
+    }
+    static void instr_divu(const string &mc)
+    {
+    }
+    static void instr_mult(const string &mc)
+    {
+    }
+    static void instr_multu(const string &mc)
+    {
+    }
+    static void instr_mul(const string &mc)
+    {
+    }
+    static void instr_madd(const string &mc)
+    {
+    }
+    static void instr_msub(const string &mc)
+    {
+    }
+    static void instr_maddu(const string &mc)
+    {
+    }
+    static void instr_msubu(const string &mc)
+    {
+    }
+    static void instr_nor(const string &mc)
+    {
+    }
+    static void instr_or(const string &mc)
+    {
+    }
+    static void instr_ori(const string &mc)
+    {
+    }
+    static void instr_sll(const string &mc)
+    {
+    }
+    static void instr_sllv(const string &mc)
+    {
+    }
+    static void instr_sra(const string &mc)
+    {
+    }
+    static void instr_srav(const string &mc)
+    {
+    }
+    static void instr_srl(const string &mc)
+    {
+    }
+    static void instr_srlv(const string &mc)
+    {
+    }
+    static void instr_sub(const string &mc)
+    {
+    }
+    static void instr_subu(const string &mc)
+    {
+    }
+    static void instr_xor(const string &mc)
+    {
+    }
+    static void instr_xori(const string &mc)
+    {
+    }
+    static void instr_lui(const string &mc)
+    {
+    }
+    static void instr_slt(const string &mc)
+    {
+    }
+    static void instr_sltu(const string &mc)
+    {
+    }
+    static void instr_slti(const string &mc)
+    {
+    }
+    static void instr_sltiu(const string &mc)
+    {
+    }
+    static void instr_beq(const string &mc)
+    {
+    }
+    static void instr_bgez(const string &mc)
+    {
+    }
+    static void instr_bgezal(const string &mc)
+    {
+    }
+    static void instr_bgtz(const string &mc)
+    {
+    }
+    static void instr_blez(const string &mc)
+    {
+    }
+    static void instr_bltzal(const string &mc)
+    {
+    }
+    static void instr_bltz(const string &mc)
+    {
+    }
+    static void instr_bne(const string &mc)
+    {
+    }
+    static void instr_j(const string &mc)
+    {
+    }
+    static void instr_jal(const string &mc)
+    {
+    }
+    static void instr_jalr(const string &mc)
+    {
+    }
+    static void instr_jr(const string &mc)
+    {
+    }
+    static void instr_teq(const string &mc)
+    {
+    }
+    static void instr_teqi(const string &mc)
+    {
+    }
+    static void instr_tne(const string &mc)
+    {
+    }
+    static void instr_tnei(const string &mc)
+    {
+    }
+    static void instr_tge(const string &mc)
+    {
+    }
+    static void instr_tgeu(const string &mc)
+    {
+    }
+    static void instr_tgei(const string &mc)
+    {
+    }
+    static void instr_tgeiu(const string &mc)
+    {
+    }
+    static void instr_tlt(const string &mc)
+    {
+    }
+    static void instr_tltu(const string &mc)
+    {
+    }
+    static void instr_tlti(const string &mc)
+    {
+    }
+    static void instr_tltiu(const string &mc)
+    {
+    }
+    static void instr_lb(const string &mc)
+    {
+    }
+    static void instr_lbu(const string &mc)
+    {
+    }
+    static void instr_lh(const string &mc)
+    {
+    }
+    static void instr_lhu(const string &mc)
+    {
+    }
+    static void instr_lw(const string &mc)
+    {
+    }
+    static void instr_lwl(const string &mc)
+    {
+    }
+    static void instr_lwr(const string &mc)
+    {
+    }
+    static void instr_ll(const string &mc)
+    {
+    }
+    static void instr_sb(const string &mc)
+    {
+    }
+    static void instr_sh(const string &mc)
+    {
+    }
+    static void instr_sw(const string &mc)
+    {
+    }
+    static void instr_swl(const string &mc)
+    {
+    }
+    static void instr_swr(const string &mc)
+    {
+    }
+    static void instr_sc(const string &mc)
+    {
+    }
+    static void instr_mfhi(const string &mc)
+    {
+    }
+    static void instr_mflo(const string &mc)
+    {
+    }
+    static void instr_mthi(const string &mc)
+    {
+    }
+    static void instr_mtlo(const string &mc)
+    {
+    }
+    static void instr_syscall(const string &mc)
+    {
+    }
+};
+void Simulator::gen_opcode_to_func()
+{
+    /*
+    Except for R instructions
+    */
+    opcode_to_func.emplace("001000", instr_addi);
+}
+void Simulator::gen_Rfunc_to_func()
+{
+    /*
+    for R instructions only
+    */
+}
+void Simulator::exec_instr(const string &mc)
+{
+    // opcode + func
+    string opcode = mc.substr(0, 6);
+    if (opcode == "000000")
+    {
+        string func = mc.substr(mc.size() - 6, 6);
+        auto it = Rfunc_to_func.find(opcode);
+        if (it == Rfunc_to_func.end())
+        {
+            cout << "function not found!" << endl;
+        }
+        (it->second)(mc);
+    }
+    else
+    {
+        auto it = opcode_to_func.find(opcode);
+        if (it == opcode_to_func.end())
+        {
+            cout << "function not found!" << endl;
+        }
+        (it->second)(mc);
+    }
+}
+size_t Simulator::memmap(uint32_t vm)
+{
+    return (vm - base_vm) / 4;
+}
+void Simulator::init_reg_value()
+{
+    size_t sp_idx = 29;
+    reg[sp_idx] = 0xa00000;
+}
+void Simulator::store_text()
+{
+    size_t i;
+    for (i = 0; i < output.size(); i++)
+    {
+        string s = output[i];
+        if (s.find(".text") != string::npos)
+        {
+            ++i;
+            break;
+        }
+    }
+    for (i; i < output.size(); i++)
+    {
+        memory[text_end_idx++] = output[i];
+    }
+}
+void Simulator::simulate()
+{
+    gen_regcode_to_idx();
+    gen_opcode_to_func();
+    init_reg_value();
+    store_static_data();
+    store_text();
+    // start simulating
+    uint32_t pc = base_vm;
+#ifdef DEBUG_SIM
+    exec_instr("00100000100001000000000000000001");
+#endif
+    while (!memory[memmap(pc)].empty())
+    {
+        exec_instr(memory[memmap(pc)]);
+        pc += 4;
+    }
+}
+void Simulator::gen_regcode_to_idx()
+{
+    for (size_t i = 0; i < reg_size; i++)
+    {
+        string s = bitset<5>(i).to_string();
+        regcode_to_idx[s] = i;
+    }
+}
+void Simulator::store_static_data()
+{
+    for (size_t i = 1; i < output.size(); i++)
+    {
+        string s = output[i];
+        while (s.find(".text") == string::npos)
+        {
+            memory[dynamic_st_idx++] = s;
+            s = output[++i];
+        }
+        break;
+    }
+}
 int main(int argc, char *argv[])
 {
-    Scanner scanner;
-    uint32_t init_pc = 0x400000;
-    Parser parser(scanner.get_data_seg(), scanner.get_text_seg(), init_pc);
+    Assembler assembler;
+    Simulator simulator(assembler.output);
+#ifdef DEBUG_SIM
+
+#endif
     if (argc == 1)
     {
-        scanner.scan(cin);
-        parser.parse();
-        parser.print_machine_code(cout);
+        assembler.scanner.scan(cin);
+        assembler.parser.parse();
+        simulator.simulate();
     }
     else if (argc == 2)
     {
-        ifstream filein(argv[1]);
-        if (!filein.is_open())
+        ifstream asmin(argv[1]);
+        if (!asmin.is_open())
         {
             cout << argv[1] << "can not open" << endl;
             return 0;
         }
-        scanner.scan(filein);
-        parser.parse();
-        parser.print_machine_code(cout);
+        assembler.scanner.scan(asmin);
+        assembler.parser.parse();
+        assembler.parser.print_machine_code(cout);
     }
     else if (argc == 3)
     {
-        ifstream filein(argv[1]);
+        ifstream asmin(argv[1]);
         ofstream fileout(argv[2]);
-        if (!filein.is_open())
+        if (!asmin.is_open())
         {
             cout << argv[1] << "can not open" << endl;
             return 0;
@@ -813,10 +1346,33 @@ int main(int argc, char *argv[])
             cout << argv[2] << "can not open" << endl;
             return 0;
         }
-        scanner.scan(filein);
-        parser.parse();
-        parser.print_machine_code(fileout);
+        assembler.scanner.scan(asmin);
+        assembler.parser.parse();
+        assembler.parser.print_machine_code(fileout);
     }
-
+    else if (argc == 4)
+    {
+        ifstream asmin(argv[1]);
+        ifstream filein(argv[2]);
+        ofstream fileout(argv[3]);
+        if (!asmin.is_open())
+        {
+            cout << argv[1] << "can not open" << endl;
+            return 0;
+        }
+        if (!filein.is_open())
+        {
+            cout << argv[2] << "can not open" << endl;
+            return 0;
+        }
+        if (!fileout.is_open())
+        {
+            cout << argv[3] << "can not open" << endl;
+            return 0;
+        }
+        assembler.scanner.scan(asmin);
+        assembler.parser.parse();
+        simulator.simulate();
+    }
     return 0;
 }
