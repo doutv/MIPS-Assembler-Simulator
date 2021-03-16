@@ -660,7 +660,7 @@ string Assembler::Parser::get_R_instruction(const string &op)
         else if (op == "madd")
         {
             opcode = "011100";
-            funct = "000010";
+            funct = "000000";
         }
         else if (op == "msub")
         {
@@ -1081,10 +1081,12 @@ public:
     Simulator(vector<string> &input_) : input(input_) {}
 
     unordered_map<string, function<void(const string &)>> opcode_to_func;
-    unordered_map<string, function<void(const string &)>> Rfunct_to_func;
+    unordered_map<string, function<void(const string &)>> opcode_funct_to_func;
+    unordered_map<string, function<void(const string &)>> rt_to_func;
     void exec_instr(const string &mc);
     void gen_opcode_to_func();
-    void gen_Rfunc_to_func();
+    void gen_opcode_funct_to_func();
+    void gen_rt_to_func();
     // lots of instruction functions
     static void instr_add(const string &mc)
     {
@@ -1325,8 +1327,9 @@ public:
 void Simulator::gen_opcode_to_func()
 {
     /*
-    Except for R instructions
+    Some I and J instructions 
     opcode -> instr_func
+    Total 28
     */
     // 26 I instructions
     opcode_to_func.emplace("000100", instr_beq);
@@ -1351,64 +1354,110 @@ void Simulator::gen_opcode_to_func()
     opcode_to_func.emplace("101010", instr_swl);
     opcode_to_func.emplace("101110", instr_swr);
     opcode_to_func.emplace("001111", instr_lui);
-    opcode_to_func.emplace("000001", instr_bgez);
+    opcode_to_func.emplace("110000", instr_ll);
+    opcode_to_func.emplace("111000", instr_sc);
     opcode_to_func.emplace("000111", instr_bgtz);
-    opcode_to_func.emplace("000111", instr_blez);
-    opcode_to_func.emplace("000001", instr_bltz);
+    opcode_to_func.emplace("000110", instr_blez);
     // 2 J instructions
     opcode_to_func.emplace("000010", instr_j);
     opcode_to_func.emplace("000011", instr_jal);
 }
-void Simulator::gen_Rfunc_to_func()
+void Simulator::gen_rt_to_func()
 {
     /*
-    for R instructions only
-    funct -> instr_func
+    special I instructions with opcode=000001
+    rt -> instr_func
+    Total 10
     */
-    // 26 R instructions
-    Rfunct_to_func.emplace("100000", instr_add);
-    Rfunct_to_func.emplace("100001", instr_addu);
-    Rfunct_to_func.emplace("100010", instr_sub);
-    Rfunct_to_func.emplace("100011", instr_subu);
-    Rfunct_to_func.emplace("100100", instr_and);
-    Rfunct_to_func.emplace("100101", instr_or);
-    Rfunct_to_func.emplace("100110", instr_xor);
-    Rfunct_to_func.emplace("100111", instr_nor);
-    Rfunct_to_func.emplace("101010", instr_slt);
-    Rfunct_to_func.emplace("101011", instr_sltu);
-    Rfunct_to_func.emplace("000100", instr_sllv);
-    Rfunct_to_func.emplace("000110", instr_srlv);
-    Rfunct_to_func.emplace("000111", instr_srav);
-    Rfunct_to_func.emplace("011000", instr_mult);
-    Rfunct_to_func.emplace("011001", instr_multu);
-    Rfunct_to_func.emplace("011010", instr_div);
-    Rfunct_to_func.emplace("011011", instr_divu);
-    Rfunct_to_func.emplace("001001", instr_jalr);
-    Rfunct_to_func.emplace("000000", instr_sll);
-    Rfunct_to_func.emplace("000011", instr_sra);
-    Rfunct_to_func.emplace("000010", instr_srl);
-    Rfunct_to_func.emplace("010001", instr_mthi);
-    Rfunct_to_func.emplace("010011", instr_mtlo);
-    Rfunct_to_func.emplace("001000", instr_jr);
-    Rfunct_to_func.emplace("010000", instr_mfhi);
-    Rfunct_to_func.emplace("010010", instr_mflo);
+    // 10 special I instructions with opcode=000001
+    rt_to_func.emplace("00000", instr_bltz);
+    rt_to_func.emplace("00001", instr_bgez);
+    rt_to_func.emplace("10001", instr_bgezal);
+    rt_to_func.emplace("10000", instr_bltzal);
+    rt_to_func.emplace("01100", instr_teqi);
+    rt_to_func.emplace("01110", instr_tnei);
+    rt_to_func.emplace("01000", instr_tgei);
+    rt_to_func.emplace("01001", instr_tgeiu);
+    rt_to_func.emplace("01010", instr_tlti);
+    rt_to_func.emplace("01011", instr_tltiu);
+}
+void Simulator::gen_opcode_funct_to_func()
+{
+    /*
+    R instructions only
+    opcode+funct -> instr_func
+    Total 38
+    */
+    // 39 R instructions
+    opcode_funct_to_func.emplace("000000100000", instr_add);
+    opcode_funct_to_func.emplace("000000100001", instr_addu);
+    opcode_funct_to_func.emplace("000000100010", instr_sub);
+    opcode_funct_to_func.emplace("000000100011", instr_subu);
+    opcode_funct_to_func.emplace("000000100100", instr_and);
+    opcode_funct_to_func.emplace("000000100101", instr_or);
+    opcode_funct_to_func.emplace("000000100110", instr_xor);
+    opcode_funct_to_func.emplace("000000100111", instr_nor);
+    opcode_funct_to_func.emplace("000000101010", instr_slt);
+    opcode_funct_to_func.emplace("000000101011", instr_sltu);
+    opcode_funct_to_func.emplace("000000000100", instr_sllv);
+    opcode_funct_to_func.emplace("000000000110", instr_srlv);
+    opcode_funct_to_func.emplace("000000000111", instr_srav);
+    opcode_funct_to_func.emplace("000000011000", instr_mult);
+    opcode_funct_to_func.emplace("000000011001", instr_multu);
+    opcode_funct_to_func.emplace("000000011010", instr_div);
+    opcode_funct_to_func.emplace("000000011011", instr_divu);
+    opcode_funct_to_func.emplace("000000001001", instr_jalr);
+    opcode_funct_to_func.emplace("000000000000", instr_sll);
+    opcode_funct_to_func.emplace("000000000011", instr_sra);
+    opcode_funct_to_func.emplace("000000000010", instr_srl);
+    opcode_funct_to_func.emplace("000000010001", instr_mthi);
+    opcode_funct_to_func.emplace("000000010011", instr_mtlo);
+    opcode_funct_to_func.emplace("000000001000", instr_jr);
+    opcode_funct_to_func.emplace("000000010000", instr_mfhi);
+    opcode_funct_to_func.emplace("000000010010", instr_mflo);
+    opcode_funct_to_func.emplace("000000110100", instr_teq);
+    opcode_funct_to_func.emplace("000000110110", instr_tne);
+    opcode_funct_to_func.emplace("000000110000", instr_tge);
+    opcode_funct_to_func.emplace("000000110001", instr_tgeu);
+    opcode_funct_to_func.emplace("000000110010", instr_tlt);
+    opcode_funct_to_func.emplace("000000110011", instr_tltu);
+    opcode_funct_to_func.emplace("000000100001", instr_clo);
+    opcode_funct_to_func.emplace("000000100000", instr_clz);
+
+    opcode_funct_to_func.emplace("011100000010", instr_mul);
+    opcode_funct_to_func.emplace("011100000000", instr_madd);
+    opcode_funct_to_func.emplace("011100000100", instr_msub);
+    opcode_funct_to_func.emplace("011100000001", instr_maddu);
+    opcode_funct_to_func.emplace("011100000101", instr_msubu);
 }
 void Simulator::exec_instr(const string &mc)
 {
     const string syscall = "00000000000000000000000000001100";
     if (mc == syscall)
     {
+        instr_syscall(mc);
+        return;
     }
-    instr_syscall(mc);
-    return;
     string opcode = mc.substr(0, 6);
-    const string R_opcode = "000000";
-    if (opcode == R_opcode)
+    const string R_opcode[2] = {"000000", "011100"};
+    const string Ispecial_opcode = "000001";
+    if (opcode == R_opcode[0] || opcode == R_opcode[1])
     {
         // R instructions
         string funct = mc.substr(mc.size() - 6, 6);
-        auto it = Rfunct_to_func.find(opcode);
-        if (it == Rfunct_to_func.end())
+        auto it = opcode_funct_to_func.find(opcode + funct);
+        if (it == opcode_funct_to_func.end())
+        {
+            cout << "function not found!" << endl;
+        }
+        (it->second)(mc);
+    }
+    else if (opcode == Ispecial_opcode)
+    {
+        // special I instructions with opcode=000001
+        string rt = mc.substr(11, 5);
+        auto it = rt_to_func.find(rt);
+        if (it == rt_to_func.end())
         {
             cout << "function not found!" << endl;
         }
@@ -1416,6 +1465,7 @@ void Simulator::exec_instr(const string &mc)
     }
     else
     {
+        // Some I and J instructions
         auto it = opcode_to_func.find(opcode);
         if (it == opcode_to_func.end())
         {
