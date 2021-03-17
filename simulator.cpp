@@ -1049,7 +1049,7 @@ class Simulator
 public:
     /*
     Memory structure:
-    stack_st_idx = 6000
+    stack_st_idx = 6 * 1024 * 1024
     | <- stack data
     stack_end_idx
     | 
@@ -1057,19 +1057,21 @@ public:
     | <- dynamic data
     dynamic_st_idx = static_end_idx
     | <- static data
-    static_st_idx = 1000
+    static_st_idx = 1 * 1024 * 1024
     |
     text_end_idx
     | <- text data
     text_st_idx = 0
     */
+    typedef array<char, 32> word_t;
+    typedef array<char, 8> byte_t;
     static const uint32_t base_vm = 0x400000;
-    static const size_t memory_size = 6 * 1024; // 6MB
-    static string memory[memory_size];          // 4bytes for each element
+    static const size_t memory_size = 6 * 1024 * 1024; // 6MB
+    static array<byte_t, memory_size> memory;  // char memory[memory_size][8]
     static const size_t reg_size = 32;
     static int32_t reg[reg_size];
     static size_t text_end_idx;
-    static const size_t static_st_idx = 1000;
+    static const size_t static_st_idx = 1024 * 1024;
     static size_t dynamic_st_idx;
     static size_t dynamic_end_idx;
     static const size_t stack_end_idx = memory_size;
@@ -1077,13 +1079,17 @@ public:
     const vector<string> &input;
     vector<string> output;
 
+    void store_word_to_memory(const word_t &word, uint32_t addr);
+    void store_byte_to_memory(const byte_t &byte, uint32_t addr);
+    word_t get_word_from_memory(uint32_t addr);
+    byte_t get_byte_from_memory(uint32_t addr);
     void gen_regcode_to_idx();
     void store_static_data();
     void init_reg_value();
     void store_text();
     void simulate();
-    static pair<size_t, size_t> memmap(uint32_t vm);
-    static void store_byte_to_memory(string &s, uint32_t addr);
+    static size_t addr2idx(uint32_t vm);
+    static size_t idx2addr(size_t idx);
     Simulator(vector<string> &input_) : input(input_) {}
 
     unordered_map<string, function<void(const string &)>> opcode_to_func;
@@ -1346,20 +1352,41 @@ public:
         case 8: // read_string
             uint32_t addr = reg[a0_idx];
             size_t len = reg[a1_idx];
-            for (size_t i = 0; i < len; i++)
+            if (n < 1)
+                break;
+            else if (n == 1)
             {
-                char ch = getchar();
-                if (ch == '\0')
-                {
-                }
-                // convert char to string with size=8
+                char ch = '\0';
                 string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
-                store_byte_to_memory(s, addr++);
+                byte_t byte;
+                copy(s.begin(), s.end(), byte.data());
+                store_byte_to_memory(byte, addr++);
+            }
+            else
+            {
+                for (size_t i = 0; i < len - 1; i++)
+                {
+                    char ch = getchar();
+                    // If less than len-1, adds newline to end.
+                    if (ch == '\0')
+                        ch = '\n';
+                    // convert char to string with size=8
+                    string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
+                    byte_t byte;
+                    copy(s.begin(), s.end(), byte.data());
+                    store_byte_to_memory(byte, addr++);
+                }
+                // pads with null byte
+                char ch = '\0';
+                string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
+                byte_t byte;
+                copy(s.begin(), s.end(), byte.data());
+                store_byte_to_memory(byte, addr++);
             }
             break;
         case 9: // sbrk
+            reg[v0_idx] = dynamic_end_idx;
             dynamic_end_idx += reg[a0_idx];
-            reg[v0_idx] = reinterpret_cast<int32_t>(sbrk(reg[a0_idx]));
             break;
         case 10: // exit
             exit(0);
@@ -1391,20 +1418,44 @@ public:
         }
     }
 };
-void Simulator::store_byte_to_memory(string &s, uint32_t addr)
+void store_word_to_memory(const word_t &word, uint32_t addr)
 {
-    /*
-    @string s: s.size()=8
-    store one byte string (size=8) to memory
-    */
-    const size_t byte_len = 8;
-    size_t idx = memmap(addr).first;
-    size_t offset = memmap(addr).second;
-    if (memory[idx].size() && memory[idx].size() >= offset * byte_len)
-        memory[idx].replace(offset, byte_len, s);
-    else
-        memory[idx] += s;
+    size_t idx = addr2idx(addr);
+    size_t j = 0;
+    for (size_t i = idx; i < idx + 4; i++)
+    {
+        for (size_t k = 0; k < 8; k++)
+            memory[i][k] = word[j++];
+    }
 }
+void store_byte_to_memory(const byte_t &byte, uint32_t addr)
+{
+    size_t idx = addr2idx(addr);
+    size_t j = 0;
+    for (size_t k = 0; k < 8; k++)
+        memory[idx][k] = word[j++];
+}
+word_t get_word_from_memory(uint32_t addr)
+{
+    word_t word;
+    size_t idx = addr2idx(addr);
+    size_t j = 0;
+    for (size_t i = idx; i < idx + 4; i++)
+    {
+        for (size_t k = 0; k < 8; k++)
+            word[j++] = memory[i][k];
+    }
+    return word;
+}
+byte_t get_byte_from_memory(uint32_t addr)
+{
+    byte_t byte;
+    size_t idx = addr2idx(addr);
+    size_t j = 0;
+    for (size_t k = 0; k < 8; k++)
+        byte[j++] = memory[idx][k];
+}
+
 void Simulator::gen_opcode_to_func()
 {
     /*
@@ -1555,14 +1606,19 @@ void Simulator::exec_instr(const string &mc)
         (it->second)(mc);
     }
 }
-pair<size_t, size_t> Simulator::memmap(uint32_t vm)
+size_t Simulator::addr2idx(uint32_t vm)
 {
     /*
-    idx: memory[idx] 4byte
-    offset={0,1,2,3}: memory[idx][offset] 1byte
-    @return pair<idx,offset>
+    virual memory addr -> idx
     */
-    return make_pair((vm - base_vm) / 4, (vm - base_vm) % 4);
+    return vm - base_vm;
+}
+size_t Simulator::idx2addr(size_t idx)
+{
+    /*
+    idx -> virual memory addr
+    */
+    return idx + base_vm;
 }
 void Simulator::init_reg_value()
 {
@@ -1583,7 +1639,11 @@ void Simulator::store_text()
     }
     for (i; i < output.size(); i++)
     {
-        memory[text_end_idx++] = output[i];
+        word_t word;
+        for (size_t k = 0; k < word.size(); k++)
+            word[k] = output[i][k];
+        store_word_to_memory(word, idx2addr(text_end_idx));
+        text_end_idx += 4;
     }
 }
 void Simulator::simulate()
@@ -1598,9 +1658,11 @@ void Simulator::simulate()
 #ifdef DEBUG_SIM
     exec_instr("00100000100001000000000000000001");
 #endif
-    while (!memory[memmap(pc).first].empty())
+    while (pc >= base_vm && pc < text_end_idx)
     {
-        exec_instr(memory[memmap(pc).first]);
+        word_t word = get_word_from_memory(pc);
+        string mc(begin(word), end(word));
+        exec_instr(mc);
         pc += 4;
     }
 }
@@ -1614,15 +1676,19 @@ void Simulator::gen_regcode_to_idx()
 }
 void Simulator::store_static_data()
 {
+    /*
+    store .data
+    output[0] == ".data"
+    */
     for (size_t i = 1; i < output.size(); i++)
     {
-        string s = output[i];
-        while (s.find(".text") == string::npos)
-        {
-            memory[dynamic_st_idx++] = s;
-            s = output[++i];
-        }
-        break;
+        if (output[i].find(".text") == string::npos)
+            break;
+        word_t word;
+        for (size_t k = 0; k < word.size(); k++)
+            word[k] = output[i][k];
+        store_word_to_memory(word, idx2addr(dynamic_st_idx));
+        dynamic_st_idx += 4;
     }
 }
 int main(int argc, char *argv[])
