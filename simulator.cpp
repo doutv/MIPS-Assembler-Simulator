@@ -1067,22 +1067,28 @@ public:
     typedef array<char, 8> byte_t;
     static const uint32_t base_vm = 0x400000;
     static const size_t memory_size = 6 * 1024 * 1024; // 6MB
-    static array<byte_t, memory_size> memory;  // char memory[memory_size][8]
-    static const size_t reg_size = 32;
+    static array<byte_t, memory_size> memory;          // char memory[memory_size][8]
+    static const size_t reg_size = 34;
     static int32_t reg[reg_size];
     static size_t text_end_idx;
     static const size_t static_st_idx = 1024 * 1024;
     static size_t dynamic_st_idx;
     static size_t dynamic_end_idx;
     static const size_t stack_end_idx = memory_size;
-    unordered_map<string, size_t> regcode_to_idx;
+    static unordered_map<string, size_t> regcode_to_idx;
     const vector<string> &input;
     vector<string> output;
+    static const size_t v0 = 2;
+    static const size_t a0 = 4;
+    static const size_t a1 = 5;
+    static const size_t a2 = 6;
+    static const size_t lo = 32;
+    static const size_t hi = 33;
 
-    void store_word_to_memory(const word_t &word, uint32_t addr);
-    void store_byte_to_memory(const byte_t &byte, uint32_t addr);
-    word_t get_word_from_memory(uint32_t addr);
-    byte_t get_byte_from_memory(uint32_t addr);
+    static void store_word_to_memory(const word_t &word, uint32_t addr);
+    static void store_byte_to_memory(const byte_t &byte, uint32_t addr);
+    static word_t get_word_from_memory(uint32_t addr);
+    static byte_t get_byte_from_memory(uint32_t addr);
     void gen_regcode_to_idx();
     void store_static_data();
     void init_reg_value();
@@ -1099,262 +1105,657 @@ public:
     void gen_opcode_to_func();
     void gen_opcode_funct_to_func();
     void gen_rt_to_func();
+    static int32_t &get_regv(const string &reg_str);
     // lots of instruction functions
+    static void overflow()
+    {
+        cout << "Overflow!" << endl;
+        exit(1);
+    }
+    // R instructions
     static void instr_add(const string &mc)
     {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+        if (__builtin_add_overflow(get_regv(rs), get_regv(rt), &get_regv(rd)))
+            overflow();
     }
     static void instr_addu(const string &mc)
     {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+        if (__builtin_add_overflow((uint32_t)get_regv(rs), (uint32_t)get_regv(rt), &get_regv(rd)))
+            overflow();
     }
+    static void instr_and(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+        get_regv(rd) = get_regv(rs) & get_regv(rt);
+    }
+    static void instr_clo(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+        size_t cnt = 0;
+        for (size_t i = 31; i >= 0; i--)
+        {
+            if (get_regv(rs) & (1 << i) == 0)
+            {
+                cnt = 32 - i;
+                break;
+            }
+        }
+        get_regv(rd) = cnt;
+    }
+    static void instr_clz(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+        size_t cnt = 0;
+        for (size_t i = 31; i >= 0; i--)
+        {
+            if (get_regv(rs) & (1 << i))
+            {
+                cnt = 32 - i;
+                break;
+            }
+        }
+        get_regv(rd) = cnt;
+    }
+    static void instr_div(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+        reg[lo] = get_regv(rs) / get_regv(rt);
+        reg[hi] = get_regv(rs) / get_regv(rt);
+    }
+    static void instr_divu(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+        reg[lo] = (uint32_t)get_regv(rs) / (uint32_t)get_regv(rt);
+        reg[hi] = (uint32_t)get_regv(rs) / (uint32_t)get_regv(rt);
+    }
+    static void instr_mult(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+        int64_t tmp = (int64_t)get_regv(rs) * (int64_t)get_regv(rt);
+        reg[lo] = tmp & numeric_limits<int32_t>::max();
+        reg[hi] = tmp >> 32;
+    }
+    static void instr_multu(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_mul(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_madd(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_msub(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_maddu(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_msubu(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_nor(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_or(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_sll(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_sllv(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_sra(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_srav(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_srl(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_srlv(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_sub(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_subu(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_xor(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_slt(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_sltu(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_jalr(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_jr(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_teq(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_tne(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_tge(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_tgeu(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_tlt(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_tltu(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_mfhi(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_mflo(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_mthi(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+    static void instr_mtlo(const string &mc)
+    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
+    }
+
+    // I instructions
     static void instr_addi(const string &mc)
     {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
         cout << "addi:" << mc << endl;
     }
     static void instr_addiu(const string &mc)
     {
-    }
-    static void instr_and(const string &mc)
-    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
     }
     static void instr_andi(const string &mc)
     {
-    }
-    static void instr_clo(const string &mc)
-    {
-    }
-    static void instr_clz(const string &mc)
-    {
-    }
-    static void instr_div(const string &mc)
-    {
-    }
-    static void instr_divu(const string &mc)
-    {
-    }
-    static void instr_mult(const string &mc)
-    {
-    }
-    static void instr_multu(const string &mc)
-    {
-    }
-    static void instr_mul(const string &mc)
-    {
-    }
-    static void instr_madd(const string &mc)
-    {
-    }
-    static void instr_msub(const string &mc)
-    {
-    }
-    static void instr_maddu(const string &mc)
-    {
-    }
-    static void instr_msubu(const string &mc)
-    {
-    }
-    static void instr_nor(const string &mc)
-    {
-    }
-    static void instr_or(const string &mc)
-    {
+        string rs, rt, rd, shamt;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        rd = mc.substr(16, 5);
+        shamt = mc.substr(21, 5);
     }
     static void instr_ori(const string &mc)
     {
-    }
-    static void instr_sll(const string &mc)
-    {
-    }
-    static void instr_sllv(const string &mc)
-    {
-    }
-    static void instr_sra(const string &mc)
-    {
-    }
-    static void instr_srav(const string &mc)
-    {
-    }
-    static void instr_srl(const string &mc)
-    {
-    }
-    static void instr_srlv(const string &mc)
-    {
-    }
-    static void instr_sub(const string &mc)
-    {
-    }
-    static void instr_subu(const string &mc)
-    {
-    }
-    static void instr_xor(const string &mc)
-    {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_xori(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_lui(const string &mc)
     {
-    }
-    static void instr_slt(const string &mc)
-    {
-    }
-    static void instr_sltu(const string &mc)
-    {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_slti(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_sltiu(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_beq(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_bgez(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_bgezal(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_bgtz(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_blez(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_bltzal(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_bltz(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_bne(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
-    static void instr_j(const string &mc)
-    {
-    }
-    static void instr_jal(const string &mc)
-    {
-    }
-    static void instr_jalr(const string &mc)
-    {
-    }
-    static void instr_jr(const string &mc)
-    {
-    }
-    static void instr_teq(const string &mc)
-    {
-    }
+
     static void instr_teqi(const string &mc)
     {
-    }
-    static void instr_tne(const string &mc)
-    {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_tnei(const string &mc)
     {
-    }
-    static void instr_tge(const string &mc)
-    {
-    }
-    static void instr_tgeu(const string &mc)
-    {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_tgei(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_tgeiu(const string &mc)
     {
-    }
-    static void instr_tlt(const string &mc)
-    {
-    }
-    static void instr_tltu(const string &mc)
-    {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_tlti(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_tltiu(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_lb(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_lbu(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_lh(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_lhu(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_lw(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_lwl(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_lwr(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_ll(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_sb(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_sh(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_sw(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_swl(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_swr(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
     static void instr_sc(const string &mc)
     {
+        string rs, rt, imme;
+        rs = mc.substr(6, 5);
+        rt = mc.substr(11, 5);
+        imme = mc.substr(16, 16);
     }
-    static void instr_mfhi(const string &mc)
+
+    // J instructions
+    static void instr_j(const string &mc)
     {
+        string imme;
+        imme = mc.substr(6, 26);
     }
-    static void instr_mflo(const string &mc)
+    static void instr_jal(const string &mc)
     {
+        string imme;
+        imme = mc.substr(6, 26);
     }
-    static void instr_mthi(const string &
-    {
-    }
-    static void instr_mtlo(const string &mc)
-    {
-    }
+
+    // O instructions
     static void instr_syscall(const string &mc)
     {
-        const size_t v0_idx = 2;
-        const size_t a0_idx = 4;
-        const size_t a1_idx = 5;
-        const size_t a2_idx = 6;
-        switch (reg[v0_idx])
+        switch (reg[v0])
         {
         case 1: // print_int
-            printf("%d", reg[a0_idx]);
+        {
+            printf("%d", reg[a0]);
             break;
+        }
         case 4: // print_string
-            printf("%s", reg[a0_idx]);
+        {
+            printf("%s", reg[a0]);
             break;
+        }
         case 5: // read_int
-            cin >> reg[v0_idx];
+        {
+            cin >> reg[v0];
             break;
+        }
         case 8: // read_string
-            uint32_t addr = reg[a0_idx];
-            size_t len = reg[a1_idx];
-            if (n < 1)
+        {
+            uint32_t addr = reg[a0];
+            size_t len = reg[a1];
+            if (len < 1)
                 break;
-            else if (n == 1)
+            else if (len == 1)
             {
                 char ch = '\0';
                 string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
@@ -1384,41 +1785,64 @@ public:
                 store_byte_to_memory(byte, addr++);
             }
             break;
+        }
         case 9: // sbrk
-            reg[v0_idx] = dynamic_end_idx;
-            dynamic_end_idx += reg[a0_idx];
+        {
+            reg[v0] = dynamic_end_idx;
+            dynamic_end_idx += reg[a0];
             break;
+        }
         case 10: // exit
+        {
             exit(0);
             break;
+        }
         case 11: // print_char
-            printf("%c", reg[a0_idx]);
+        {
+            printf("%c", reg[a0]);
             break;
+        }
         case 12: // read_char
-            scanf("%c", &reg[v0_idx]);
+        {
+            scanf("%c", &reg[v0]);
             break;
+        }
         case 13: // open
-            const char *filename = to_string(reg[a0_idx]).c_str();
-            reg[v0_idx] = open(filename, reg[a1_idx], reg[a2_idx]);
+        {
+            const char *filename = to_string(reg[a0]).c_str();
+            reg[v0] = open(filename, reg[a1], reg[a2]);
             break;
+        }
         case 14: // read
-            reg[v0_idx] = read(reg[a0_idx], (void *)(reg[a1_idx]), reg[a2_idx]);
+        {
+            reg[v0] = read(reg[a0], (void *)(reg[a1]), reg[a2]);
             break;
+        }
         case 15: // write
-            reg[v0_idx] = write(reg[a0_idx], (const void *)reg[a1_idx], reg[a2_idx]);
+        {
+            reg[v0] = write(reg[a0], (const void *)reg[a1], reg[a2]);
             break;
+        }
         case 16:
-            close(reg[a0_idx]);
+        {
+            close(reg[a0]);
             break;
+        }
         case 17:
-            exit(reg[a0_idx]);
+        {
+            exit(reg[a0]);
             break;
         default:
             break;
         }
+        }
     }
 };
-void store_word_to_memory(const word_t &word, uint32_t addr)
+int32_t &Simulator::get_regv(const string &reg_str)
+{
+    return reg[regcode_to_idx[reg_str]];
+}
+void Simulator::store_word_to_memory(const word_t &word, uint32_t addr)
 {
     size_t idx = addr2idx(addr);
     size_t j = 0;
@@ -1428,14 +1852,14 @@ void store_word_to_memory(const word_t &word, uint32_t addr)
             memory[i][k] = word[j++];
     }
 }
-void store_byte_to_memory(const byte_t &byte, uint32_t addr)
+void Simulator::store_byte_to_memory(const byte_t &byte, uint32_t addr)
 {
     size_t idx = addr2idx(addr);
     size_t j = 0;
     for (size_t k = 0; k < 8; k++)
-        memory[idx][k] = word[j++];
+        memory[idx][k] = byte[j++];
 }
-word_t get_word_from_memory(uint32_t addr)
+Simulator::word_t Simulator::get_word_from_memory(uint32_t addr)
 {
     word_t word;
     size_t idx = addr2idx(addr);
@@ -1447,13 +1871,14 @@ word_t get_word_from_memory(uint32_t addr)
     }
     return word;
 }
-byte_t get_byte_from_memory(uint32_t addr)
+Simulator::byte_t Simulator::get_byte_from_memory(uint32_t addr)
 {
     byte_t byte;
     size_t idx = addr2idx(addr);
     size_t j = 0;
     for (size_t k = 0; k < 8; k++)
         byte[j++] = memory[idx][k];
+    return byte;
 }
 
 void Simulator::gen_opcode_to_func()
