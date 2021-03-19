@@ -6,11 +6,11 @@ SIM_TESTS = a-plus-b fib memcpy-hello-world
 .PHONY: test all clean
 .ONESHELL:
 
-all: $(PROM) asm_test sim_test
+all: $(PROM) sim_test
 	@echo "All tests passed!"
 
 $(PROM): $(PROM).cpp
-	g++ $(PROM).cpp -o $(PROM)
+	g++ $(PROM).cpp -o $(PROM) -std=c++17
 
 clean:
 	rm $(PROM)

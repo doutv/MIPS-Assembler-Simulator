@@ -1,6 +1,6 @@
 // #define DEBUG_ASS
 // #define DEBUG_DATA
-#define DEBUG_SIM
+// #define DEBUG_SIM
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -1071,15 +1071,15 @@ public:
     typedef array<char, byte_size> byte_t;
     static const uint32_t base_vm = 0x400000;
     static const size_t memory_size = 6 * 1024 * 1024; // 6MB
-    static array<byte_t, memory_size> memory;          // char memory[memory_size][8]
+    inline static array<byte_t, memory_size> memory;   // char memory[memory_size][8]
     static const size_t reg_size = 34;
-    static int32_t reg[reg_size];
-    static size_t text_end_idx;
+    inline static int32_t reg[reg_size];
+    inline static size_t text_end_idx;
     static const size_t static_st_idx = 1024 * 1024;
-    static size_t dynamic_st_idx;
-    static size_t dynamic_end_idx;
+    inline static size_t dynamic_st_idx;
+    inline static size_t dynamic_end_idx;
     static const size_t stack_end_idx = memory_size;
-    static unordered_map<string, size_t> regcode_to_idx;
+    inline static unordered_map<string, size_t> regcode_to_idx;
     const vector<string> &input;
     vector<string> output;
     static const size_t v0 = 2;
@@ -1088,7 +1088,8 @@ public:
     static const size_t a2 = 6;
     static const size_t lo = 32;
     static const size_t hi = 33;
-    static uint32_t pc;
+    inline static uint32_t pc;
+    ostream &outstream;
 
     static void store_word_to_memory(const word_t &word, uint32_t addr);
     static void store_half_to_memory(const half_t &half, uint32_t addr);
@@ -1106,7 +1107,8 @@ public:
     void simulate();
     static size_t addr2idx(uint32_t vm);
     static size_t idx2addr(size_t idx);
-    Simulator(vector<string> &input_) : input(input_) {}
+    Simulator(vector<string> &input_, ostream &outstream_ = cout)
+        : outstream(outstream_), input(input_) {}
 
     unordered_map<string, function<void(const string &)>> opcode_to_func;
     unordered_map<string, function<void(const string &)>> opcode_funct_to_func;
@@ -1151,7 +1153,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
-        if (__builtin_add_overflow((uint32_t)get_regv(rs), (uint32_t)get_regv(rt), &get_regv(rd)))
+        if (__builtin_add_overflow(get_regv(rs), get_regv(rt), &get_regv(rd)))
             signal_exception("overflow");
     }
     static void instr_and(const string &mc)
@@ -1388,7 +1390,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
-        get_regv(rd) = (uint32_t)get_regv(rs) - (uint32_t)get_regv(rt);
+        get_regv(rd) = get_regv(rs) - get_regv(rt);
     }
     static void instr_xor(const string &mc)
     {
@@ -1548,28 +1550,30 @@ public:
     // I instructions
     static void instr_addi(const string &mc)
     {
-        string rs, rt, rd, shamt;
+        string rs, rt, imme;
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
-        rd = mc.substr(16, 5);
-        shamt = mc.substr(21, 5);
-        cout << "addi:" << mc << endl;
+        imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        if (__builtin_add_overflow(get_regv(rs), imme_val, &get_regv(rt)))
+            signal_exception("overflow");
     }
     static void instr_addiu(const string &mc)
     {
-        string rs, rt, rd, shamt;
+        string rs, rt, imme;
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
-        rd = mc.substr(16, 5);
-        shamt = mc.substr(21, 5);
+        imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        get_regv(rt) = get_regv(rs) + imme_val;
     }
     static void instr_andi(const string &mc)
     {
-        string rs, rt, rd, shamt;
+        string rs, rt, imme;
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
-        rd = mc.substr(16, 5);
-        shamt = mc.substr(21, 5);
+        imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
     }
     static void instr_ori(const string &mc)
     {
@@ -1797,7 +1801,8 @@ public:
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
-        get_regv(rt) = get_byteval_from_memory(get_regv(rs) + imme_val);
+        int32_t tmp = get_byteval_from_memory(get_regv(rs) + imme_val);
+        get_regv(rt) = tmp & ((1 << 8) - 1);
     }
     static void instr_lh(const string &mc)
     {
@@ -1833,6 +1838,28 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        int32_t init_val = get_regv(rt);
+        int32_t addr = get_regv(rt) + imme_val;
+        int32_t word_val = get_wordval_from_memory(addr);
+        int32_t lowbit_2 = get_regv(rs) & ((1 << 2) - 1);
+        switch (lowbit_2)
+        {
+        case 0:
+            get_regv(rt) = word_val << 24 + (init_val & ((1 << 24) - 1));
+            break;
+        case 1:
+            get_regv(rt) = word_val << 16 + (init_val & ((1 << 16) - 1));
+            break;
+        case 2:
+            get_regv(rt) = word_val << 8 + (init_val & ((1 << 8) - 1));
+            break;
+        case 3:
+            get_regv(rt) = word_val;
+            break;
+        default:
+            break;
+        }
     }
     static void instr_lwr(const string &mc)
     {
@@ -1840,6 +1867,28 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        int32_t init_val = get_regv(rt);
+        int32_t addr = get_regv(rt) + imme_val;
+        int32_t word_val = get_wordval_from_memory(addr);
+        int32_t lowbit_2 = get_regv(rs) & ((1 << 2) - 1);
+        switch (lowbit_2)
+        {
+        case 0:
+            get_regv(rt) = word_val;
+            break;
+        case 1:
+            get_regv(rt) = word_val >> 8 + (init_val & (0b11111111 << 24));
+            break;
+        case 2:
+            get_regv(rt) = word_val >> 16 + (init_val & ((1 << 16) - 1));
+            break;
+        case 3:
+            get_regv(rt) = word_val >> 24 + (init_val & ((1 << 24) - 1));
+            break;
+        default:
+            break;
+        }
     }
     static void instr_ll(const string &mc)
     {
@@ -1857,8 +1906,10 @@ public:
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
+        int32_t tmp = get_regv(rt);
+        tmp = tmp & ((1 << 8) - 1);
         byte_t byte;
-        string byte_str = bitset<byte_size>(get_regv(rt)).to_string();
+        string byte_str = bitset<byte_size>(tmp).to_string();
         copy(byte_str.begin(), byte_str.end(), byte.data());
         store_byte_to_memory(byte, get_regv(rs) + imme_val);
     }
@@ -1892,6 +1943,32 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        int32_t init_val = get_regv(rt);
+        int32_t addr = get_regv(rt) + imme_val;
+        int32_t lowbit_2 = get_regv(rs) & ((1 << 2) - 1);
+        int32_t word_val = get_wordval_from_memory(addr);
+        switch (lowbit_2)
+        {
+        case 0:
+            word_val &= (((1 << 24) - 1) << 8) + (init_val >> 24);
+            break;
+        case 1:
+            word_val &= (((1 << 16) - 1) << 16) + (init_val >> 16);
+            break;
+        case 2:
+            word_val &= (((1 << 8) - 1) << 24) + (init_val >> 8);
+            break;
+        case 3:
+            word_val = init_val;
+            break;
+        default:
+            break;
+        }
+        word_t word;
+        string word_str = bitset<word_size>(word_val).to_string();
+        copy(word_str.begin(), word_str.end(), word.data());
+        store_word_to_memory(word, addr);
     }
     static void instr_swr(const string &mc)
     {
@@ -1899,6 +1976,32 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        int32_t init_val = get_regv(rt);
+        int32_t addr = get_regv(rt) + imme_val;
+        int32_t lowbit_2 = get_regv(rs) & ((1 << 2) - 1);
+        int32_t word_val = get_wordval_from_memory(addr);
+        switch (lowbit_2)
+        {
+        case 0:
+            word_val = init_val;
+            break;
+        case 1:
+            word_val = (init_val << 8) + (word_val & ((1 << 8) - 1));
+            break;
+        case 2:
+            word_val = (init_val << 16) + (word_val & ((1 << 16) - 1));
+            break;
+        case 3:
+            word_val = (init_val << 24) + (word_val & ((1 << 24) - 1));
+            break;
+        default:
+            break;
+        }
+        word_t word;
+        string word_str = bitset<word_size>(word_val).to_string();
+        copy(word_str.begin(), word_str.end(), word.data());
+        store_word_to_memory(word, addr);
     }
     static void instr_sc(const string &mc)
     {
@@ -1939,7 +2042,8 @@ public:
         {
         case 1: // print_int
         {
-            printf("%d", reg[a0]);
+            cout<<(int32_t)reg[a0];
+            // outstream >> 
             break;
         }
         case 4: // print_string
@@ -2018,12 +2122,12 @@ public:
         }
         case 14: // read
         {
-            reg[v0] = read(reg[a0], (void *)(reg[a1]), reg[a2]);
+            reg[v0] = read(reg[a0], reinterpret_cast<void *>(reg[a1]), reg[a2]);
             break;
         }
         case 15: // write
         {
-            reg[v0] = write(reg[a0], (const void *)reg[a1], reg[a2]);
+            reg[v0] = write(reg[a0], reinterpret_cast<const void *>(reg[a1]), reg[a2]);
             break;
         }
         case 16:
@@ -2108,23 +2212,23 @@ Simulator::half_t Simulator::get_half_from_memory(uint32_t addr)
 int32_t Simulator::get_wordval_from_memory(uint32_t addr)
 {
     word_t word = get_word_from_memory(addr);
-    string word_str;
-    copy(word.begin(), word.end(), word_str.data());
+    string word_str(&word[0]);
     int32_t word_val = stoi(word_str, nullptr, 2);
+    return word_val;
 }
 int16_t Simulator::get_halfval_from_memory(uint32_t addr)
 {
     half_t half = get_half_from_memory(addr);
-    string half_str;
-    copy(half.begin(), half.end(), half_str.data());
+    string half_str(&half[0]);
     int16_t half_val = stoi(half_str, nullptr, 2);
+    return half_val;
 }
 int8_t Simulator::get_byteval_from_memory(uint32_t addr)
 {
     byte_t byte = get_byte_from_memory(addr);
-    string byte_str;
-    copy(byte.begin(), byte.end(), byte_str.data());
+    string byte_str(&byte[0]);
     int8_t byte_val = stoi(byte_str, nullptr, 2);
+    return byte_val;
 }
 void Simulator::gen_opcode_to_func()
 {
@@ -2363,67 +2467,30 @@ void Simulator::store_static_data()
 }
 int main(int argc, char *argv[])
 {
+    if (argc != 4)
+        cout << "Missing Argument!" << endl;
+    ifstream asmin(argv[1]);
+    ifstream filein(argv[2]);
+    ofstream fileout(argv[3]);
+    if (!asmin.is_open())
+    {
+        cout << argv[1] << "can not open" << endl;
+        return 0;
+    }
+    if (!filein.is_open())
+    {
+        cout << argv[2] << "can not open" << endl;
+        return 0;
+    }
+    if (!fileout.is_open())
+    {
+        cout << argv[3] << "can not open" << endl;
+        return 0;
+    }
     Assembler assembler;
-    Simulator simulator(assembler.output);
-    if (argc == 1)
-    {
-        assembler.scanner.scan(cin);
-        assembler.parser.parse();
-        simulator.simulate();
-    }
-    else if (argc == 2)
-    {
-        ifstream asmin(argv[1]);
-        if (!asmin.is_open())
-        {
-            cout << argv[1] << "can not open" << endl;
-            return 0;
-        }
-        assembler.scanner.scan(asmin);
-        assembler.parser.parse();
-        simulator.simulate();
-    }
-    else if (argc == 3)
-    {
-        ifstream asmin(argv[1]);
-        ofstream fileout(argv[2]);
-        if (!asmin.is_open())
-        {
-            cout << argv[1] << "can not open" << endl;
-            return 0;
-        }
-        if (!fileout.is_open())
-        {
-            cout << argv[2] << "can not open" << endl;
-            return 0;
-        }
-        assembler.scanner.scan(asmin);
-        assembler.parser.parse();
-        simulator.simulate();
-    }
-    else if (argc == 4)
-    {
-        ifstream asmin(argv[1]);
-        ifstream filein(argv[2]);
-        ofstream fileout(argv[3]);
-        if (!asmin.is_open())
-        {
-            cout << argv[1] << "can not open" << endl;
-            return 0;
-        }
-        if (!filein.is_open())
-        {
-            cout << argv[2] << "can not open" << endl;
-            return 0;
-        }
-        if (!fileout.is_open())
-        {
-            cout << argv[3] << "can not open" << endl;
-            return 0;
-        }
-        assembler.scanner.scan(asmin);
-        assembler.parser.parse();
-        simulator.simulate();
-    }
+    Simulator simulator(assembler.output, fileout);
+    assembler.scanner.scan(asmin);
+    assembler.parser.parse();
+    simulator.simulate();
     return 0;
 }
