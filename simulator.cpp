@@ -1056,7 +1056,7 @@ public:
     dynamic_end_idx
     | <- dynamic data
     dynamic_st_idx = static_end_idx
-    | <- static data
+    | <- data
     static_st_idx = 1 * 1024 * 1024
     |
     text_end_idx
@@ -1071,15 +1071,15 @@ public:
     typedef array<char, byte_size> byte_t;
     static const uint32_t base_vm = 0x400000;
     static const size_t memory_size = 6 * 1024 * 1024; // 6MB
-    inline static array<byte_t, memory_size> memory;   // char memory[memory_size][8]
+    array<byte_t, memory_size> memory;                 // char memory[memory_size][8]
     static const size_t reg_size = 34;
-    inline static int32_t reg[reg_size];
-    inline static size_t text_end_idx;
+    int32_t reg[reg_size];
+    size_t text_end_idx;
     static const size_t static_st_idx = 1024 * 1024;
-    inline static size_t dynamic_st_idx;
-    inline static size_t dynamic_end_idx;
+    size_t dynamic_st_idx;
+    size_t dynamic_end_idx;
     static const size_t stack_end_idx = memory_size;
-    inline static unordered_map<string, size_t> regcode_to_idx;
+    unordered_map<string, size_t> regcode_to_idx;
     const vector<string> &input;
     vector<string> output;
     static const size_t v0 = 2;
@@ -1088,25 +1088,25 @@ public:
     static const size_t a2 = 6;
     static const size_t lo = 32;
     static const size_t hi = 33;
-    inline static uint32_t pc;
+    uint32_t pc;
     ostream &outstream;
 
-    static void store_word_to_memory(const word_t &word, uint32_t addr);
-    static void store_half_to_memory(const half_t &half, uint32_t addr);
-    static void store_byte_to_memory(const byte_t &byte, uint32_t addr);
-    static word_t get_word_from_memory(uint32_t addr);
-    static half_t get_half_from_memory(uint32_t addr);
-    static byte_t get_byte_from_memory(uint32_t addr);
-    static int32_t get_wordval_from_memory(uint32_t addr);
-    static int16_t get_halfval_from_memory(uint32_t addr);
-    static int8_t get_byteval_from_memory(uint32_t addr);
+    void store_word_to_memory(const word_t &word, uint32_t addr);
+    void store_half_to_memory(const half_t &half, uint32_t addr);
+    void store_byte_to_memory(const byte_t &byte, uint32_t addr);
+    word_t get_word_from_memory(uint32_t addr);
+    half_t get_half_from_memory(uint32_t addr);
+    byte_t get_byte_from_memory(uint32_t addr);
+    int32_t get_wordval_from_memory(uint32_t addr);
+    int16_t get_halfval_from_memory(uint32_t addr);
+    int8_t get_byteval_from_memory(uint32_t addr);
     void gen_regcode_to_idx();
     void store_static_data();
     void init_reg_value();
     void store_text();
     void simulate();
-    static size_t addr2idx(uint32_t vm);
-    static size_t idx2addr(size_t idx);
+    size_t addr2idx(uint32_t vm);
+    size_t idx2addr(size_t idx);
     Simulator(vector<string> &input_, ostream &outstream_ = cout)
         : outstream(outstream_), input(input_) {}
 
@@ -1114,17 +1114,17 @@ public:
     unordered_map<string, function<void(const string &)>> opcode_funct_to_func;
     unordered_map<string, function<void(const string &)>> rt_to_func;
     void exec_instr(const string &mc);
-    void gen_opcode_to_func();
-    void gen_opcode_funct_to_func();
-    void gen_rt_to_func();
-    static int32_t &get_regv(const string &reg_str);
+    void gen_opcode_to_func(unordered_map<string, function<void(const string &)>> &m);
+    void gen_opcode_funct_to_func(unordered_map<string, function<void(const string &)>> &m);
+    void gen_rt_to_func(unordered_map<string, function<void(const string &)>> &m);
+    int32_t &get_regv(const string &reg_str);
     // lots of instruction functions
-    static void signal_exception(const string &err)
+    void signal_exception(const string &err)
     {
         cout << err << endl;
         exit(1);
     }
-    static int32_t sign_extent(const string &imme)
+    int32_t sign_extent(const string &imme)
     {
         int32_t imme_val = stoi(imme, nullptr, 2);
         int32_t sign_mask = 1 << 15;
@@ -1136,7 +1136,7 @@ public:
         return imme_val;
     }
     // R instructions
-    static void instr_add(const string &mc)
+    void instr_add(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1146,7 +1146,7 @@ public:
         if (__builtin_add_overflow(get_regv(rs), get_regv(rt), &get_regv(rd)))
             signal_exception("overflow");
     }
-    static void instr_addu(const string &mc)
+    void instr_addu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1156,7 +1156,7 @@ public:
         if (__builtin_add_overflow(get_regv(rs), get_regv(rt), &get_regv(rd)))
             signal_exception("overflow");
     }
-    static void instr_and(const string &mc)
+    void instr_and(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1165,7 +1165,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = get_regv(rs) & get_regv(rt);
     }
-    static void instr_clo(const string &mc)
+    void instr_clo(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1183,7 +1183,7 @@ public:
         }
         get_regv(rd) = cnt;
     }
-    static void instr_clz(const string &mc)
+    void instr_clz(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1201,7 +1201,7 @@ public:
         }
         get_regv(rd) = cnt;
     }
-    static void instr_div(const string &mc)
+    void instr_div(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1211,7 +1211,7 @@ public:
         reg[lo] = get_regv(rs) / get_regv(rt);
         reg[hi] = get_regv(rs) / get_regv(rt);
     }
-    static void instr_divu(const string &mc)
+    void instr_divu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1221,7 +1221,7 @@ public:
         reg[lo] = (uint32_t)get_regv(rs) / (uint32_t)get_regv(rt);
         reg[hi] = (uint32_t)get_regv(rs) / (uint32_t)get_regv(rt);
     }
-    static void instr_mult(const string &mc)
+    void instr_mult(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1232,7 +1232,7 @@ public:
         reg[lo] = tmp & numeric_limits<int32_t>::max();
         reg[hi] = tmp >> 32;
     }
-    static void instr_multu(const string &mc)
+    void instr_multu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1243,7 +1243,7 @@ public:
         reg[lo] = tmp & numeric_limits<uint32_t>::max();
         reg[hi] = tmp >> 32;
     }
-    static void instr_mul(const string &mc)
+    void instr_mul(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1253,7 +1253,7 @@ public:
         int64_t tmp = (int64_t)get_regv(rs) * (int64_t)get_regv(rt);
         get_regv(rd) = (int32_t)tmp;
     }
-    static void instr_madd(const string &mc)
+    void instr_madd(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1264,7 +1264,7 @@ public:
         reg[lo] = tmp & numeric_limits<int32_t>::max();
         reg[hi] = tmp >> 32;
     }
-    static void instr_msub(const string &mc)
+    void instr_msub(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1274,7 +1274,7 @@ public:
         reg[lo] = tmp & numeric_limits<int32_t>::max();
         reg[hi] = tmp >> 32;
     }
-    static void instr_maddu(const string &mc)
+    void instr_maddu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1285,7 +1285,7 @@ public:
         reg[lo] = tmp & numeric_limits<uint32_t>::max();
         reg[hi] = tmp >> 32;
     }
-    static void instr_msubu(const string &mc)
+    void instr_msubu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1296,7 +1296,7 @@ public:
         reg[lo] = tmp & numeric_limits<uint32_t>::max();
         reg[hi] = tmp >> 32;
     }
-    static void instr_nor(const string &mc)
+    void instr_nor(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1305,7 +1305,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = ~(get_regv(rs) | get_regv(rt));
     }
-    static void instr_or(const string &mc)
+    void instr_or(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1314,7 +1314,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = (get_regv(rs) | get_regv(rt));
     }
-    static void instr_sll(const string &mc)
+    void instr_sll(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1324,7 +1324,7 @@ public:
         int32_t shamt_val = stoi(shamt, nullptr, 2);
         get_regv(rd) = get_regv(rt) << shamt_val;
     }
-    static void instr_sllv(const string &mc)
+    void instr_sllv(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1333,7 +1333,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = get_regv(rt) << get_regv(rs);
     }
-    static void instr_sra(const string &mc)
+    void instr_sra(const string &mc)
     {
         // arithmetic shift
         string rs, rt, rd, shamt;
@@ -1344,7 +1344,7 @@ public:
         int32_t shamt_val = stoi(shamt, nullptr, 2);
         get_regv(rd) = get_regv(rt) >> shamt_val;
     }
-    static void instr_srav(const string &mc)
+    void instr_srav(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1353,7 +1353,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = get_regv(rt) >> get_regv(rs);
     }
-    static void instr_srl(const string &mc)
+    void instr_srl(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1363,7 +1363,7 @@ public:
         int32_t shamt_val = stoi(shamt, nullptr, 2);
         get_regv(rd) = (get_regv(rt) >> shamt_val) & ((1 << (32 - shamt_val)) - 1);
     }
-    static void instr_srlv(const string &mc)
+    void instr_srlv(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1373,7 +1373,7 @@ public:
         int32_t shamt_val = get_regv(rs) & (0b11111);
         get_regv(rd) = (get_regv(rt) >> shamt_val) & ((1 << (32 - shamt_val)) - 1);
     }
-    static void instr_sub(const string &mc)
+    void instr_sub(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1383,7 +1383,7 @@ public:
         if (__builtin_sub_overflow(get_regv(rs), get_regv(rt), &get_regv(rd)))
             signal_exception("overflow");
     }
-    static void instr_subu(const string &mc)
+    void instr_subu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1392,7 +1392,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = get_regv(rs) - get_regv(rt);
     }
-    static void instr_xor(const string &mc)
+    void instr_xor(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1401,7 +1401,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = get_regv(rs) ^ get_regv(rt);
     }
-    static void instr_slt(const string &mc)
+    void instr_slt(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1410,7 +1410,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = (get_regv(rs) < get_regv(rt)) ? 1 : 0;
     }
-    static void instr_sltu(const string &mc)
+    void instr_sltu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1419,7 +1419,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = ((uint32_t)get_regv(rs) < (uint32_t)get_regv(rt)) ? 1 : 0;
     }
-    static void instr_jalr(const string &mc)
+    void instr_jalr(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1429,7 +1429,7 @@ public:
         get_regv(rd) = pc;
         pc = get_regv(rs);
     }
-    static void instr_jr(const string &mc)
+    void instr_jr(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1438,7 +1438,7 @@ public:
         shamt = mc.substr(21, 5);
         pc = get_regv(rs);
     }
-    static void instr_teq(const string &mc)
+    void instr_teq(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1450,7 +1450,7 @@ public:
             signal_exception("Trap");
         }
     }
-    static void instr_tne(const string &mc)
+    void instr_tne(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1462,7 +1462,7 @@ public:
             signal_exception("Trap if not equal");
         }
     }
-    static void instr_tge(const string &mc)
+    void instr_tge(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1474,7 +1474,7 @@ public:
             signal_exception("Trap if greater or equal");
         }
     }
-    static void instr_tgeu(const string &mc)
+    void instr_tgeu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1486,7 +1486,7 @@ public:
             signal_exception("Trap if greater or equal unsigned");
         }
     }
-    static void instr_tlt(const string &mc)
+    void instr_tlt(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1498,7 +1498,7 @@ public:
             signal_exception("Trap if less than");
         }
     }
-    static void instr_tltu(const string &mc)
+    void instr_tltu(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1510,7 +1510,7 @@ public:
             signal_exception("Trap if less than unsigned");
         }
     }
-    static void instr_mfhi(const string &mc)
+    void instr_mfhi(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1519,7 +1519,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = reg[hi];
     }
-    static void instr_mflo(const string &mc)
+    void instr_mflo(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1528,7 +1528,7 @@ public:
         shamt = mc.substr(21, 5);
         get_regv(rd) = reg[lo];
     }
-    static void instr_mthi(const string &mc)
+    void instr_mthi(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1537,7 +1537,7 @@ public:
         shamt = mc.substr(21, 5);
         reg[hi] = get_regv(rs);
     }
-    static void instr_mtlo(const string &mc)
+    void instr_mtlo(const string &mc)
     {
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
@@ -1548,7 +1548,7 @@ public:
     }
 
     // I instructions
-    static void instr_addi(const string &mc)
+    void instr_addi(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1558,7 +1558,7 @@ public:
         if (__builtin_add_overflow(get_regv(rs), imme_val, &get_regv(rt)))
             signal_exception("overflow");
     }
-    static void instr_addiu(const string &mc)
+    void instr_addiu(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1567,7 +1567,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = get_regv(rs) + imme_val;
     }
-    static void instr_andi(const string &mc)
+    void instr_andi(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1575,7 +1575,7 @@ public:
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
     }
-    static void instr_ori(const string &mc)
+    void instr_ori(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1584,7 +1584,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = ~(get_regv(rs) | imme_val);
     }
-    static void instr_xori(const string &mc)
+    void instr_xori(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1593,7 +1593,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = get_regv(rs) ^ imme_val;
     }
-    static void instr_lui(const string &mc)
+    void instr_lui(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1602,7 +1602,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = imme_val << 16;
     }
-    static void instr_slti(const string &mc)
+    void instr_slti(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1611,7 +1611,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = (get_regv(rs) < imme_val) ? 1 : 0;
     }
-    static void instr_sltiu(const string &mc)
+    void instr_sltiu(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1620,7 +1620,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = ((uint32_t)get_regv(rs) < (uint32_t)imme_val) ? 1 : 0;
     }
-    static void instr_beq(const string &mc)
+    void instr_beq(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1631,7 +1631,7 @@ public:
         if (get_regv(rs) == get_regv(rt))
             pc += offset;
     }
-    static void instr_bgez(const string &mc)
+    void instr_bgez(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1642,7 +1642,7 @@ public:
         if (get_regv(rs) >= 0)
             pc += offset;
     }
-    static void instr_bgezal(const string &mc)
+    void instr_bgezal(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1654,7 +1654,7 @@ public:
         if (get_regv(rs) >= 0)
             pc += offset;
     }
-    static void instr_bgtz(const string &mc)
+    void instr_bgtz(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1665,7 +1665,7 @@ public:
         if (get_regv(rs) > 0)
             pc += offset;
     }
-    static void instr_blez(const string &mc)
+    void instr_blez(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1676,7 +1676,7 @@ public:
         if (get_regv(rs) <= 0)
             pc += offset;
     }
-    static void instr_bltzal(const string &mc)
+    void instr_bltzal(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1687,7 +1687,7 @@ public:
         if (get_regv(rs) < 0)
             pc += offset;
     }
-    static void instr_bltz(const string &mc)
+    void instr_bltz(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1698,7 +1698,7 @@ public:
         if (get_regv(rs) < 0)
             pc += offset;
     }
-    static void instr_bne(const string &mc)
+    void instr_bne(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1710,7 +1710,7 @@ public:
             pc += offset;
     }
 
-    static void instr_teqi(const string &mc)
+    void instr_teqi(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1722,7 +1722,7 @@ public:
             signal_exception("Trap if equal immediate");
         }
     }
-    static void instr_tnei(const string &mc)
+    void instr_tnei(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1734,7 +1734,7 @@ public:
             signal_exception("Trap if equal immediate");
         }
     }
-    static void instr_tgei(const string &mc)
+    void instr_tgei(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1746,7 +1746,7 @@ public:
             signal_exception("Trap if greater or equal");
         }
     }
-    static void instr_tgeiu(const string &mc)
+    void instr_tgeiu(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1758,7 +1758,7 @@ public:
             signal_exception("Trap if greater or equal unsigned");
         }
     }
-    static void instr_tlti(const string &mc)
+    void instr_tlti(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1770,7 +1770,7 @@ public:
             signal_exception("Trap if less than immediate");
         }
     }
-    static void instr_tltiu(const string &mc)
+    void instr_tltiu(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1782,7 +1782,7 @@ public:
             signal_exception("Trap if less than immediate");
         }
     }
-    static void instr_lb(const string &mc)
+    void instr_lb(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1794,7 +1794,7 @@ public:
         bool sign = (byte_val & mask == mask) ? 1 : 0;
         get_regv(rt) = sign ? (((1 << 24) - 1) << 8) & byte_val : byte_val;
     }
-    static void instr_lbu(const string &mc)
+    void instr_lbu(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1804,7 +1804,7 @@ public:
         int32_t tmp = get_byteval_from_memory(get_regv(rs) + imme_val);
         get_regv(rt) = tmp & ((1 << 8) - 1);
     }
-    static void instr_lh(const string &mc)
+    void instr_lh(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1813,7 +1813,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = get_halfval_from_memory(get_regv(rs) + imme_val);
     }
-    static void instr_lhu(const string &mc)
+    void instr_lhu(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1823,7 +1823,7 @@ public:
         int32_t tmp = get_byteval_from_memory(get_regv(rs) + imme_val);
         get_regv(rt) = tmp & ((1 << 16) - 1);
     }
-    static void instr_lw(const string &mc)
+    void instr_lw(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1832,7 +1832,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = get_wordval_from_memory(get_regv(rs) + imme_val);
     }
-    static void instr_lwl(const string &mc)
+    void instr_lwl(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1861,7 +1861,7 @@ public:
             break;
         }
     }
-    static void instr_lwr(const string &mc)
+    void instr_lwr(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1890,7 +1890,7 @@ public:
             break;
         }
     }
-    static void instr_ll(const string &mc)
+    void instr_ll(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1899,7 +1899,7 @@ public:
         int32_t imme_val = sign_extent(imme);
         get_regv(rt) = get_wordval_from_memory(get_regv(rs) + imme_val);
     }
-    static void instr_sb(const string &mc)
+    void instr_sb(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1913,7 +1913,7 @@ public:
         copy(byte_str.begin(), byte_str.end(), byte.data());
         store_byte_to_memory(byte, get_regv(rs) + imme_val);
     }
-    static void instr_sh(const string &mc)
+    void instr_sh(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1925,7 +1925,7 @@ public:
         copy(half_str.begin(), half_str.end(), half.data());
         store_half_to_memory(half, get_regv(rs) + imme_val);
     }
-    static void instr_sw(const string &mc)
+    void instr_sw(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1937,7 +1937,7 @@ public:
         copy(word_str.begin(), word_str.end(), word.data());
         store_word_to_memory(word, get_regv(rs) + imme_val);
     }
-    static void instr_swl(const string &mc)
+    void instr_swl(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -1970,7 +1970,7 @@ public:
         copy(word_str.begin(), word_str.end(), word.data());
         store_word_to_memory(word, addr);
     }
-    static void instr_swr(const string &mc)
+    void instr_swr(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -2003,7 +2003,7 @@ public:
         copy(word_str.begin(), word_str.end(), word.data());
         store_word_to_memory(word, addr);
     }
-    static void instr_sc(const string &mc)
+    void instr_sc(const string &mc)
     {
         string rs, rt, imme;
         rs = mc.substr(6, 5);
@@ -2017,7 +2017,7 @@ public:
     }
 
     // J instructions
-    static void instr_j(const string &mc)
+    void instr_j(const string &mc)
     {
         string imme;
         imme = mc.substr(6, 26);
@@ -2025,7 +2025,7 @@ public:
         int32_t pc_hi4 = pc & (((1 << 4) - 1) << 28);
         pc = pc_hi4 | ((imme_val << 2) & ((1 << 28) - 1));
     }
-    static void instr_jal(const string &mc)
+    void instr_jal(const string &mc)
     {
         string imme;
         imme = mc.substr(6, 26);
@@ -2036,14 +2036,14 @@ public:
     }
 
     // O instructions
-    static void instr_syscall(const string &mc)
+    void instr_syscall(const string &mc)
     {
         switch (reg[v0])
         {
         case 1: // print_int
         {
-            cout<<(int32_t)reg[a0];
-            // outstream >> 
+            cout << (int32_t)reg[a0];
+            // outstream >>
             break;
         }
         case 4: // print_string
@@ -2230,7 +2230,7 @@ int8_t Simulator::get_byteval_from_memory(uint32_t addr)
     int8_t byte_val = stoi(byte_str, nullptr, 2);
     return byte_val;
 }
-void Simulator::gen_opcode_to_func()
+void Simulator::gen_opcode_to_func(unordered_map<string, function<void(const string &)>> &m)
 {
     /*
     Some I and J instructions 
@@ -2238,37 +2238,38 @@ void Simulator::gen_opcode_to_func()
     Total 28
     */
     // 26 I instructions
-    opcode_to_func.emplace("000100", instr_beq);
-    opcode_to_func.emplace("000101", instr_bne);
-    opcode_to_func.emplace("001000", instr_addi);
-    opcode_to_func.emplace("001001", instr_addiu);
-    opcode_to_func.emplace("001100", instr_andi);
-    opcode_to_func.emplace("001101", instr_ori);
-    opcode_to_func.emplace("001110", instr_xori);
-    opcode_to_func.emplace("001010", instr_slti);
-    opcode_to_func.emplace("001011", instr_sltiu);
-    opcode_to_func.emplace("100011", instr_lw);
-    opcode_to_func.emplace("101011", instr_sw);
-    opcode_to_func.emplace("100000", instr_lb);
-    opcode_to_func.emplace("100100", instr_lbu);
-    opcode_to_func.emplace("100001", instr_lh);
-    opcode_to_func.emplace("100101", instr_lhu);
-    opcode_to_func.emplace("101000", instr_sb);
-    opcode_to_func.emplace("101001", instr_sh);
-    opcode_to_func.emplace("100010", instr_lwl);
-    opcode_to_func.emplace("100110", instr_lwr);
-    opcode_to_func.emplace("101010", instr_swl);
-    opcode_to_func.emplace("101110", instr_swr);
-    opcode_to_func.emplace("001111", instr_lui);
-    opcode_to_func.emplace("110000", instr_ll);
-    opcode_to_func.emplace("111000", instr_sc);
-    opcode_to_func.emplace("000111", instr_bgtz);
-    opcode_to_func.emplace("000110", instr_blez);
+    // function<void(const string &)> f = bind(&Simulator::instr_beq, this, placeholders::_1);
+    m.emplace("000100", bind(&Simulator::instr_beq, this, placeholders::_1));
+    m.emplace("000101", bind(&Simulator::instr_bne, this, placeholders::_1));
+    m.emplace("001000", bind(&Simulator::instr_addi, this, placeholders::_1));
+    m.emplace("001001", bind(&Simulator::instr_addiu, this, placeholders::_1));
+    m.emplace("001100", bind(&Simulator::instr_andi, this, placeholders::_1));
+    m.emplace("001101", bind(&Simulator::instr_ori, this, placeholders::_1));
+    m.emplace("001110", bind(&Simulator::instr_xori, this, placeholders::_1));
+    m.emplace("001010", bind(&Simulator::instr_slti, this, placeholders::_1));
+    m.emplace("001011", bind(&Simulator::instr_sltiu, this, placeholders::_1));
+    m.emplace("100011", bind(&Simulator::instr_lw, this, placeholders::_1));
+    m.emplace("101011", bind(&Simulator::instr_sw, this, placeholders::_1));
+    m.emplace("100000", bind(&Simulator::instr_lb, this, placeholders::_1));
+    m.emplace("100100", bind(&Simulator::instr_lbu, this, placeholders::_1));
+    m.emplace("100001", bind(&Simulator::instr_lh, this, placeholders::_1));
+    m.emplace("100101", bind(&Simulator::instr_lhu, this, placeholders::_1));
+    m.emplace("101000", bind(&Simulator::instr_sb, this, placeholders::_1));
+    m.emplace("101001", bind(&Simulator::instr_sh, this, placeholders::_1));
+    m.emplace("100010", bind(&Simulator::instr_lwl, this, placeholders::_1));
+    m.emplace("100110", bind(&Simulator::instr_lwr, this, placeholders::_1));
+    m.emplace("101010", bind(&Simulator::instr_swl, this, placeholders::_1));
+    m.emplace("101110", bind(&Simulator::instr_swr, this, placeholders::_1));
+    m.emplace("001111", bind(&Simulator::instr_lui, this, placeholders::_1));
+    m.emplace("110000", bind(&Simulator::instr_ll, this, placeholders::_1));
+    m.emplace("111000", bind(&Simulator::instr_sc, this, placeholders::_1));
+    m.emplace("000111", bind(&Simulator::instr_bgtz, this, placeholders::_1));
+    m.emplace("000110", bind(&Simulator::instr_blez, this, placeholders::_1));
     // 2 J instructions
-    opcode_to_func.emplace("000010", instr_j);
-    opcode_to_func.emplace("000011", instr_jal);
+    m.emplace("000010", bind(&Simulator::instr_j, this, placeholders::_1));
+    m.emplace("000011", bind(&Simulator::instr_jal, this, placeholders::_1));
 }
-void Simulator::gen_rt_to_func()
+void Simulator::gen_rt_to_func(unordered_map<string, function<void(const string &)>> &m)
 {
     /*
     special I instructions with opcode=000001
@@ -2276,18 +2277,18 @@ void Simulator::gen_rt_to_func()
     Total 10
     */
     // 10 special I instructions with opcode=000001
-    rt_to_func.emplace("00000", instr_bltz);
-    rt_to_func.emplace("00001", instr_bgez);
-    rt_to_func.emplace("10001", instr_bgezal);
-    rt_to_func.emplace("10000", instr_bltzal);
-    rt_to_func.emplace("01100", instr_teqi);
-    rt_to_func.emplace("01110", instr_tnei);
-    rt_to_func.emplace("01000", instr_tgei);
-    rt_to_func.emplace("01001", instr_tgeiu);
-    rt_to_func.emplace("01010", instr_tlti);
-    rt_to_func.emplace("01011", instr_tltiu);
+    m.emplace("00000", bind(&Simulator::instr_bltz, this, placeholders::_1));
+    m.emplace("00001", bind(&Simulator::instr_bgez, this, placeholders::_1));
+    m.emplace("10001", bind(&Simulator::instr_bgezal, this, placeholders::_1));
+    m.emplace("10000", bind(&Simulator::instr_bltzal, this, placeholders::_1));
+    m.emplace("01100", bind(&Simulator::instr_teqi, this, placeholders::_1));
+    m.emplace("01110", bind(&Simulator::instr_tnei, this, placeholders::_1));
+    m.emplace("01000", bind(&Simulator::instr_tgei, this, placeholders::_1));
+    m.emplace("01001", bind(&Simulator::instr_tgeiu, this, placeholders::_1));
+    m.emplace("01010", bind(&Simulator::instr_tlti, this, placeholders::_1));
+    m.emplace("01011", bind(&Simulator::instr_tltiu, this, placeholders::_1));
 }
-void Simulator::gen_opcode_funct_to_func()
+void Simulator::gen_opcode_funct_to_func(unordered_map<string, function<void(const string &)>> &m)
 {
     /*
     R instructions only
@@ -2295,46 +2296,45 @@ void Simulator::gen_opcode_funct_to_func()
     Total 38
     */
     // 39 R instructions
-    opcode_funct_to_func.emplace("000000100000", instr_add);
-    opcode_funct_to_func.emplace("000000100001", instr_addu);
-    opcode_funct_to_func.emplace("000000100010", instr_sub);
-    opcode_funct_to_func.emplace("000000100011", instr_subu);
-    opcode_funct_to_func.emplace("000000100100", instr_and);
-    opcode_funct_to_func.emplace("000000100101", instr_or);
-    opcode_funct_to_func.emplace("000000100110", instr_xor);
-    opcode_funct_to_func.emplace("000000100111", instr_nor);
-    opcode_funct_to_func.emplace("000000101010", instr_slt);
-    opcode_funct_to_func.emplace("000000101011", instr_sltu);
-    opcode_funct_to_func.emplace("000000000100", instr_sllv);
-    opcode_funct_to_func.emplace("000000000110", instr_srlv);
-    opcode_funct_to_func.emplace("000000000111", instr_srav);
-    opcode_funct_to_func.emplace("000000011000", instr_mult);
-    opcode_funct_to_func.emplace("000000011001", instr_multu);
-    opcode_funct_to_func.emplace("000000011010", instr_div);
-    opcode_funct_to_func.emplace("000000011011", instr_divu);
-    opcode_funct_to_func.emplace("000000001001", instr_jalr);
-    opcode_funct_to_func.emplace("000000000000", instr_sll);
-    opcode_funct_to_func.emplace("000000000011", instr_sra);
-    opcode_funct_to_func.emplace("000000000010", instr_srl);
-    opcode_funct_to_func.emplace("000000010001", instr_mthi);
-    opcode_funct_to_func.emplace("000000010011", instr_mtlo);
-    opcode_funct_to_func.emplace("000000001000", instr_jr);
-    opcode_funct_to_func.emplace("000000010000", instr_mfhi);
-    opcode_funct_to_func.emplace("000000010010", instr_mflo);
-    opcode_funct_to_func.emplace("000000110100", instr_teq);
-    opcode_funct_to_func.emplace("000000110110", instr_tne);
-    opcode_funct_to_func.emplace("000000110000", instr_tge);
-    opcode_funct_to_func.emplace("000000110001", instr_tgeu);
-    opcode_funct_to_func.emplace("000000110010", instr_tlt);
-    opcode_funct_to_func.emplace("000000110011", instr_tltu);
-    opcode_funct_to_func.emplace("000000100001", instr_clo);
-    opcode_funct_to_func.emplace("000000100000", instr_clz);
-
-    opcode_funct_to_func.emplace("011100000010", instr_mul);
-    opcode_funct_to_func.emplace("011100000000", instr_madd);
-    opcode_funct_to_func.emplace("011100000100", instr_msub);
-    opcode_funct_to_func.emplace("011100000001", instr_maddu);
-    opcode_funct_to_func.emplace("011100000101", instr_msubu);
+    m.emplace("000000100000", bind(&Simulator::instr_add, this, placeholders::_1));
+    m.emplace("000000100001", bind(&Simulator::instr_addu, this, placeholders::_1));
+    m.emplace("000000100010", bind(&Simulator::instr_sub, this, placeholders::_1));
+    m.emplace("000000100011", bind(&Simulator::instr_subu, this, placeholders::_1));
+    m.emplace("000000100100", bind(&Simulator::instr_and, this, placeholders::_1));
+    m.emplace("000000100101", bind(&Simulator::instr_or, this, placeholders::_1));
+    m.emplace("000000100110", bind(&Simulator::instr_xor, this, placeholders::_1));
+    m.emplace("000000100111", bind(&Simulator::instr_nor, this, placeholders::_1));
+    m.emplace("000000101010", bind(&Simulator::instr_slt, this, placeholders::_1));
+    m.emplace("000000101011", bind(&Simulator::instr_sltu, this, placeholders::_1));
+    m.emplace("000000000100", bind(&Simulator::instr_sllv, this, placeholders::_1));
+    m.emplace("000000000110", bind(&Simulator::instr_srlv, this, placeholders::_1));
+    m.emplace("000000000111", bind(&Simulator::instr_srav, this, placeholders::_1));
+    m.emplace("000000011000", bind(&Simulator::instr_mult, this, placeholders::_1));
+    m.emplace("000000011001", bind(&Simulator::instr_multu, this, placeholders::_1));
+    m.emplace("000000011010", bind(&Simulator::instr_div, this, placeholders::_1));
+    m.emplace("000000011011", bind(&Simulator::instr_divu, this, placeholders::_1));
+    m.emplace("000000001001", bind(&Simulator::instr_jalr, this, placeholders::_1));
+    m.emplace("000000000000", bind(&Simulator::instr_sll, this, placeholders::_1));
+    m.emplace("000000000011", bind(&Simulator::instr_sra, this, placeholders::_1));
+    m.emplace("000000000010", bind(&Simulator::instr_srl, this, placeholders::_1));
+    m.emplace("000000010001", bind(&Simulator::instr_mthi, this, placeholders::_1));
+    m.emplace("000000010011", bind(&Simulator::instr_mtlo, this, placeholders::_1));
+    m.emplace("000000001000", bind(&Simulator::instr_jr, this, placeholders::_1));
+    m.emplace("000000010000", bind(&Simulator::instr_mfhi, this, placeholders::_1));
+    m.emplace("000000010010", bind(&Simulator::instr_mflo, this, placeholders::_1));
+    m.emplace("000000110100", bind(&Simulator::instr_teq, this, placeholders::_1));
+    m.emplace("000000110110", bind(&Simulator::instr_tne, this, placeholders::_1));
+    m.emplace("000000110000", bind(&Simulator::instr_tge, this, placeholders::_1));
+    m.emplace("000000110001", bind(&Simulator::instr_tgeu, this, placeholders::_1));
+    m.emplace("000000110010", bind(&Simulator::instr_tlt, this, placeholders::_1));
+    m.emplace("000000110011", bind(&Simulator::instr_tltu, this, placeholders::_1));
+    m.emplace("000000100001", bind(&Simulator::instr_clo, this, placeholders::_1));
+    m.emplace("000000100000", bind(&Simulator::instr_clz, this, placeholders::_1));
+    m.emplace("011100000010", bind(&Simulator::instr_mul, this, placeholders::_1));
+    m.emplace("011100000000", bind(&Simulator::instr_madd, this, placeholders::_1));
+    m.emplace("011100000100", bind(&Simulator::instr_msub, this, placeholders::_1));
+    m.emplace("011100000001", bind(&Simulator::instr_maddu, this, placeholders::_1));
+    m.emplace("011100000101", bind(&Simulator::instr_msubu, this, placeholders::_1));
 }
 void Simulator::exec_instr(const string &mc)
 {
@@ -2423,7 +2423,9 @@ void Simulator::store_text()
 void Simulator::simulate()
 {
     gen_regcode_to_idx();
-    gen_opcode_to_func();
+    gen_opcode_to_func(opcode_funct_to_func);
+    gen_opcode_funct_to_func(opcode_funct_to_func);
+    gen_rt_to_func(rt_to_func);
     init_reg_value();
     store_static_data();
     store_text();
