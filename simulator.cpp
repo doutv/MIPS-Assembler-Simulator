@@ -1063,8 +1063,12 @@ public:
     | <- text data
     text_st_idx = 0
     */
-    typedef array<char, 32> word_t;
-    typedef array<char, 8> byte_t;
+    static const size_t word_size = 32;
+    static const size_t half_size = 16;
+    static const size_t byte_size = 8;
+    typedef array<char, word_size> word_t;
+    typedef array<char, half_size> half_t;
+    typedef array<char, byte_size> byte_t;
     static const uint32_t base_vm = 0x400000;
     static const size_t memory_size = 6 * 1024 * 1024; // 6MB
     static array<byte_t, memory_size> memory;          // char memory[memory_size][8]
@@ -1087,9 +1091,14 @@ public:
     static uint32_t pc;
 
     static void store_word_to_memory(const word_t &word, uint32_t addr);
+    static void store_half_to_memory(const half_t &half, uint32_t addr);
     static void store_byte_to_memory(const byte_t &byte, uint32_t addr);
     static word_t get_word_from_memory(uint32_t addr);
+    static half_t get_half_from_memory(uint32_t addr);
     static byte_t get_byte_from_memory(uint32_t addr);
+    static int32_t get_wordval_from_memory(uint32_t addr);
+    static int16_t get_halfval_from_memory(uint32_t addr);
+    static int8_t get_byteval_from_memory(uint32_t addr);
     void gen_regcode_to_idx();
     void store_static_data();
     void init_reg_value();
@@ -1108,10 +1117,21 @@ public:
     void gen_rt_to_func();
     static int32_t &get_regv(const string &reg_str);
     // lots of instruction functions
-    static void overflow()
+    static void signal_exception(const string &err)
     {
-        cout << "Overflow!" << endl;
+        cout << err << endl;
         exit(1);
+    }
+    static int32_t sign_extent(const string &imme)
+    {
+        int32_t imme_val = stoi(imme, nullptr, 2);
+        int32_t sign_mask = 1 << 15;
+        int32_t sign = imme_val & sign_mask;
+        if (sign == sign_mask)
+        {
+            imme_val = imme_val | (((1 << 16) - 1) << 16);
+        }
+        return imme_val;
     }
     // R instructions
     static void instr_add(const string &mc)
@@ -1122,7 +1142,7 @@ public:
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
         if (__builtin_add_overflow(get_regv(rs), get_regv(rt), &get_regv(rd)))
-            overflow();
+            signal_exception("overflow");
     }
     static void instr_addu(const string &mc)
     {
@@ -1132,7 +1152,7 @@ public:
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
         if (__builtin_add_overflow((uint32_t)get_regv(rs), (uint32_t)get_regv(rt), &get_regv(rd)))
-            overflow();
+            signal_exception("overflow");
     }
     static void instr_and(const string &mc)
     {
@@ -1313,6 +1333,7 @@ public:
     }
     static void instr_sra(const string &mc)
     {
+        // arithmetic shift
         string rs, rt, rd, shamt;
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
@@ -1328,7 +1349,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
-        get_regv(rd) = get_regv(rt) << get_regv(rs);
+        get_regv(rd) = get_regv(rt) >> get_regv(rs);
     }
     static void instr_srl(const string &mc)
     {
@@ -1347,7 +1368,8 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
-        get_regv(rd) = (get_regv(rt) >> get_regv(rs)) & ((1 << (32 - get_regv(rs))) - 1);
+        int32_t shamt_val = get_regv(rs) & (0b11111);
+        get_regv(rd) = (get_regv(rt) >> shamt_val) & ((1 << (32 - shamt_val)) - 1);
     }
     static void instr_sub(const string &mc)
     {
@@ -1357,7 +1379,7 @@ public:
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
         if (__builtin_sub_overflow(get_regv(rs), get_regv(rt), &get_regv(rd)))
-            overflow();
+            signal_exception("overflow");
     }
     static void instr_subu(const string &mc)
     {
@@ -1402,6 +1424,8 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        get_regv(rd) = pc;
+        pc = get_regv(rs);
     }
     static void instr_jr(const string &mc)
     {
@@ -1410,6 +1434,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        pc = get_regv(rs);
     }
     static void instr_teq(const string &mc)
     {
@@ -1418,6 +1443,10 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        if (get_regv(rs) == get_regv(rt))
+        {
+            signal_exception("Trap");
+        }
     }
     static void instr_tne(const string &mc)
     {
@@ -1426,6 +1455,10 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        if (get_regv(rs) != get_regv(rt))
+        {
+            signal_exception("Trap if not equal");
+        }
     }
     static void instr_tge(const string &mc)
     {
@@ -1434,6 +1467,10 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        if (get_regv(rs) >= get_regv(rt))
+        {
+            signal_exception("Trap if greater or equal");
+        }
     }
     static void instr_tgeu(const string &mc)
     {
@@ -1442,6 +1479,10 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        if (get_regv(rs) >= (uint32_t)get_regv(rt))
+        {
+            signal_exception("Trap if greater or equal unsigned");
+        }
     }
     static void instr_tlt(const string &mc)
     {
@@ -1450,6 +1491,10 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        if (get_regv(rs) < get_regv(rt))
+        {
+            signal_exception("Trap if less than");
+        }
     }
     static void instr_tltu(const string &mc)
     {
@@ -1458,6 +1503,10 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        if ((uint32_t)get_regv(rs) < (uint32_t)get_regv(rt))
+        {
+            signal_exception("Trap if less than unsigned");
+        }
     }
     static void instr_mfhi(const string &mc)
     {
@@ -1466,6 +1515,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        get_regv(rd) = reg[hi];
     }
     static void instr_mflo(const string &mc)
     {
@@ -1474,6 +1524,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        get_regv(rd) = reg[lo];
     }
     static void instr_mthi(const string &mc)
     {
@@ -1482,6 +1533,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        reg[hi] = get_regv(rs);
     }
     static void instr_mtlo(const string &mc)
     {
@@ -1490,6 +1542,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
+        reg[lo] = get_regv(rs);
     }
 
     // I instructions
@@ -1524,7 +1577,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t imme_val = stoi(imme, nullptr, 2);
+        int32_t imme_val = sign_extent(imme);
         get_regv(rt) = ~(get_regv(rs) | imme_val);
     }
     static void instr_xori(const string &mc)
@@ -1533,7 +1586,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t imme_val = stoi(imme, nullptr, 2);
+        int32_t imme_val = sign_extent(imme);
         get_regv(rt) = get_regv(rs) ^ imme_val;
     }
     static void instr_lui(const string &mc)
@@ -1542,7 +1595,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t imme_val = stoi(imme, nullptr, 2);
+        int32_t imme_val = sign_extent(imme);
         get_regv(rt) = imme_val << 16;
     }
     static void instr_slti(const string &mc)
@@ -1551,7 +1604,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t imme_val = stoi(imme, nullptr, 2);
+        int32_t imme_val = sign_extent(imme);
         get_regv(rt) = (get_regv(rs) < imme_val) ? 1 : 0;
     }
     static void instr_sltiu(const string &mc)
@@ -1560,7 +1613,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        uint32_t imme_val = stoi(imme, nullptr, 2);
+        int32_t imme_val = sign_extent(imme);
         get_regv(rt) = ((uint32_t)get_regv(rs) < (uint32_t)imme_val) ? 1 : 0;
     }
     static void instr_beq(const string &mc)
@@ -1569,7 +1622,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t offset = stoi(imme, nullptr, 2);
+        int32_t offset = sign_extent(imme);
         offset <<= 2;
         if (get_regv(rs) == get_regv(rt))
             pc += offset;
@@ -1580,7 +1633,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t offset = stoi(imme, nullptr, 2);
+        int32_t offset = sign_extent(imme);
         offset <<= 2;
         if (get_regv(rs) >= 0)
             pc += offset;
@@ -1591,7 +1644,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t offset = stoi(imme, nullptr, 2);
+        int32_t offset = sign_extent(imme);
         offset <<= 2;
         reg[31] = pc + 4;
         if (get_regv(rs) >= 0)
@@ -1603,7 +1656,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t offset = stoi(imme, nullptr, 2);
+        int32_t offset = sign_extent(imme);
         offset <<= 2;
         if (get_regv(rs) > 0)
             pc += offset;
@@ -1614,7 +1667,7 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
-        int32_t offset = stoi(imme, nullptr, 2);
+        int32_t offset = sign_extent(imme);
         offset <<= 2;
         if (get_regv(rs) <= 0)
             pc += offset;
@@ -1625,6 +1678,10 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t offset = sign_extent(imme);
+        offset <<= 2;
+        if (get_regv(rs) < 0)
+            pc += offset;
     }
     static void instr_bltz(const string &mc)
     {
@@ -1632,6 +1689,10 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t offset = sign_extent(imme);
+        offset <<= 2;
+        if (get_regv(rs) < 0)
+            pc += offset;
     }
     static void instr_bne(const string &mc)
     {
@@ -1639,6 +1700,10 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t offset = sign_extent(imme);
+        offset <<= 2;
+        if (get_regv(rs) != get_regv(rt))
+            pc += offset;
     }
 
     static void instr_teqi(const string &mc)
@@ -1647,6 +1712,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        if (get_regv(rs) == imme_val)
+        {
+            signal_exception("Trap if equal immediate");
+        }
     }
     static void instr_tnei(const string &mc)
     {
@@ -1654,6 +1724,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        if (get_regv(rs) != imme_val)
+        {
+            signal_exception("Trap if equal immediate");
+        }
     }
     static void instr_tgei(const string &mc)
     {
@@ -1661,6 +1736,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        if (get_regv(rs) >= imme_val)
+        {
+            signal_exception("Trap if greater or equal");
+        }
     }
     static void instr_tgeiu(const string &mc)
     {
@@ -1668,6 +1748,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        if (get_regv(rs) >= (uint32_t)imme_val)
+        {
+            signal_exception("Trap if greater or equal unsigned");
+        }
     }
     static void instr_tlti(const string &mc)
     {
@@ -1675,6 +1760,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        if (get_regv(rs) < imme_val)
+        {
+            signal_exception("Trap if less than immediate");
+        }
     }
     static void instr_tltiu(const string &mc)
     {
@@ -1682,6 +1772,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        if (get_regv(rs) < (uint32_t)imme_val)
+        {
+            signal_exception("Trap if less than immediate");
+        }
     }
     static void instr_lb(const string &mc)
     {
@@ -1689,6 +1784,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        int32_t byte_val = get_byteval_from_memory(get_regv(rs) + imme_val);
+        int32_t mask = 1 << 7;
+        bool sign = (byte_val & mask == mask) ? 1 : 0;
+        get_regv(rt) = sign ? (((1 << 24) - 1) << 8) & byte_val : byte_val;
     }
     static void instr_lbu(const string &mc)
     {
@@ -1696,6 +1796,8 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        get_regv(rt) = get_byteval_from_memory(get_regv(rs) + imme_val);
     }
     static void instr_lh(const string &mc)
     {
@@ -1703,6 +1805,8 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        get_regv(rt) = get_halfval_from_memory(get_regv(rs) + imme_val);
     }
     static void instr_lhu(const string &mc)
     {
@@ -1710,6 +1814,9 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        int32_t tmp = get_byteval_from_memory(get_regv(rs) + imme_val);
+        get_regv(rt) = tmp & ((1 << 16) - 1);
     }
     static void instr_lw(const string &mc)
     {
@@ -1717,6 +1824,8 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        get_regv(rt) = get_wordval_from_memory(get_regv(rs) + imme_val);
     }
     static void instr_lwl(const string &mc)
     {
@@ -1738,6 +1847,8 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        get_regv(rt) = get_wordval_from_memory(get_regv(rs) + imme_val);
     }
     static void instr_sb(const string &mc)
     {
@@ -1745,6 +1856,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        byte_t byte;
+        string byte_str = bitset<byte_size>(get_regv(rt)).to_string();
+        copy(byte_str.begin(), byte_str.end(), byte.data());
+        store_byte_to_memory(byte, get_regv(rs) + imme_val);
     }
     static void instr_sh(const string &mc)
     {
@@ -1752,6 +1868,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        half_t half;
+        string half_str = bitset<half_size>(get_regv(rt)).to_string();
+        copy(half_str.begin(), half_str.end(), half.data());
+        store_half_to_memory(half, get_regv(rs) + imme_val);
     }
     static void instr_sw(const string &mc)
     {
@@ -1759,6 +1880,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        word_t word;
+        string word_str = bitset<word_size>(get_regv(rt)).to_string();
+        copy(word_str.begin(), word_str.end(), word.data());
+        store_word_to_memory(word, get_regv(rs) + imme_val);
     }
     static void instr_swl(const string &mc)
     {
@@ -1780,6 +1906,11 @@ public:
         rs = mc.substr(6, 5);
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
+        int32_t imme_val = sign_extent(imme);
+        word_t word;
+        string word_str = bitset<word_size>(get_regv(rt)).to_string();
+        copy(word_str.begin(), word_str.end(), word.data());
+        store_word_to_memory(word, get_regv(rs) + imme_val);
     }
 
     // J instructions
@@ -1787,11 +1918,18 @@ public:
     {
         string imme;
         imme = mc.substr(6, 26);
+        int32_t imme_val = sign_extent(imme);
+        int32_t pc_hi4 = pc & (((1 << 4) - 1) << 28);
+        pc = pc_hi4 | ((imme_val << 2) & ((1 << 28) - 1));
     }
     static void instr_jal(const string &mc)
     {
         string imme;
         imme = mc.substr(6, 26);
+        reg[31] = pc;
+        int32_t imme_val = sign_extent(imme);
+        int32_t pc_hi4 = pc & (((1 << 4) - 1) << 28);
+        pc = pc_hi4 | ((imme_val << 2) & ((1 << 28) - 1));
     }
 
     // O instructions
@@ -1823,7 +1961,7 @@ public:
             else if (len == 1)
             {
                 char ch = '\0';
-                string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
+                string s = bitset<byte_size>(static_cast<unsigned long long>(ch)).to_string();
                 byte_t byte;
                 copy(s.begin(), s.end(), byte.data());
                 store_byte_to_memory(byte, addr++);
@@ -1837,14 +1975,14 @@ public:
                     if (ch == '\0')
                         ch = '\n';
                     // convert char to string with size=8
-                    string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
+                    string s = bitset<byte_size>(static_cast<unsigned long long>(ch)).to_string();
                     byte_t byte;
                     copy(s.begin(), s.end(), byte.data());
                     store_byte_to_memory(byte, addr++);
                 }
                 // pads with null byte
                 char ch = '\0';
-                string s = bitset<8>(static_cast<unsigned long long>(ch)).to_string();
+                string s = bitset<byte_size>(static_cast<unsigned long long>(ch)).to_string();
                 byte_t byte;
                 copy(s.begin(), s.end(), byte.data());
                 store_byte_to_memory(byte, addr++);
@@ -1913,15 +2051,25 @@ void Simulator::store_word_to_memory(const word_t &word, uint32_t addr)
     size_t j = 0;
     for (size_t i = idx; i < idx + 4; i++)
     {
-        for (size_t k = 0; k < 8; k++)
+        for (size_t k = 0; k < byte_size; k++)
             memory[i][k] = word[j++];
+    }
+}
+void Simulator::store_half_to_memory(const half_t &half, uint32_t addr)
+{
+    size_t idx = addr2idx(addr);
+    size_t j = 0;
+    for (size_t i = idx; i < idx + 2; i++)
+    {
+        for (size_t k = 0; k < byte_size; k++)
+            memory[i][k] = half[j++];
     }
 }
 void Simulator::store_byte_to_memory(const byte_t &byte, uint32_t addr)
 {
     size_t idx = addr2idx(addr);
     size_t j = 0;
-    for (size_t k = 0; k < 8; k++)
+    for (size_t k = 0; k < byte_size; k++)
         memory[idx][k] = byte[j++];
 }
 Simulator::word_t Simulator::get_word_from_memory(uint32_t addr)
@@ -1931,7 +2079,7 @@ Simulator::word_t Simulator::get_word_from_memory(uint32_t addr)
     size_t j = 0;
     for (size_t i = idx; i < idx + 4; i++)
     {
-        for (size_t k = 0; k < 8; k++)
+        for (size_t k = 0; k < byte_size; k++)
             word[j++] = memory[i][k];
     }
     return word;
@@ -1941,11 +2089,43 @@ Simulator::byte_t Simulator::get_byte_from_memory(uint32_t addr)
     byte_t byte;
     size_t idx = addr2idx(addr);
     size_t j = 0;
-    for (size_t k = 0; k < 8; k++)
+    for (size_t k = 0; k < byte_size; k++)
         byte[j++] = memory[idx][k];
     return byte;
 }
-
+Simulator::half_t Simulator::get_half_from_memory(uint32_t addr)
+{
+    half_t half;
+    size_t idx = addr2idx(addr);
+    size_t j = 0;
+    for (size_t i = idx; i < idx + 2; i++)
+    {
+        for (size_t k = 0; k < byte_size; k++)
+            half[j++] = memory[i][k];
+    }
+    return half;
+}
+int32_t Simulator::get_wordval_from_memory(uint32_t addr)
+{
+    word_t word = get_word_from_memory(addr);
+    string word_str;
+    copy(word.begin(), word.end(), word_str.data());
+    int32_t word_val = stoi(word_str, nullptr, 2);
+}
+int16_t Simulator::get_halfval_from_memory(uint32_t addr)
+{
+    half_t half = get_half_from_memory(addr);
+    string half_str;
+    copy(half.begin(), half.end(), half_str.data());
+    int16_t half_val = stoi(half_str, nullptr, 2);
+}
+int8_t Simulator::get_byteval_from_memory(uint32_t addr)
+{
+    byte_t byte = get_byte_from_memory(addr);
+    string byte_str;
+    copy(byte.begin(), byte.end(), byte_str.data());
+    int8_t byte_val = stoi(byte_str, nullptr, 2);
+}
 void Simulator::gen_opcode_to_func()
 {
     /*

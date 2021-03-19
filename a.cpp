@@ -11,10 +11,6 @@ using namespace std;
 
 int main()
 {
-    unordered_map<int, int> m;
-    m.emplace(1, 1);
-    m.emplace(1, 2);
-    for (auto &it : m)
-        cout << it.first << ":" << it.second << endl;
+    cout << stoi("110000", nullptr, 2);
     return 0;
 }
