@@ -1,6 +1,6 @@
-// #define DEBUG_ASS
+#define DEBUG_ASS
 // #define DEBUG_DATA
-// #define DEBUG_SIM
+#define DEBUG_SIM
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -21,21 +21,19 @@ using namespace std;
 class Assembler
 {
 public:
-    vector<string> data_seg;
-    vector<string> text_seg;
-    vector<string> output;
+    inline static vector<string> data_seg;
+    inline static vector<string> text_seg;
+    inline static vector<string> output;
     class Scanner
     {
     public:
         Assembler &assembler;
-        vector<string> file;
+        inline static vector<string> file;
 
         void get_assembly(istream &in);
         void remove_comments();
         void split_data_and_text();
         void preprocess_text();
-        vector<string> &get_data_seg();
-        vector<string> &get_text_seg();
         void scan(istream &in);
         Scanner(Assembler &assembler) : assembler(assembler) {}
     };
@@ -82,16 +80,6 @@ void Assembler::Scanner::scan(istream &in)
     remove_comments();
     split_data_and_text();
     preprocess_text();
-#ifdef DEBUG_ASS
-    // cout << "---data seg---" << endl;
-    // for (string &s : assembler.data_seg)
-    //     cout << s << endl;
-    // cout << "---end data seg---" << endl;
-    // cout << "---text seg---" << endl;
-    // for (string &s : assembler.text_seg)
-    //     cout << s << endl;
-    // cout << "---end text seg---" << endl;
-#endif
 }
 void Assembler::Scanner::get_assembly(istream &in)
 {
@@ -197,9 +185,6 @@ string Assembler::Parser::get_next_token()
 }
 string Assembler::Parser::get_ascii_data(const string &data)
 {
-#ifdef DEBUG_DATA
-    cout << data << endl;
-#endif
     string res;
     for (size_t i = 0; i < data.size(); i++)
     {
@@ -235,9 +220,7 @@ string Assembler::Parser::get_ascii_data(const string &data)
 }
 void Assembler::Parser::process_dataseg()
 {
-#ifndef DEBUG_ASS
-    assembler.output.push_back(".data");
-#endif
+    output.push_back(".data");
     for (string &s : assembler.data_seg)
     {
         string target_str, tmp;
@@ -508,9 +491,7 @@ void Assembler::Parser::parse()
 {
     process_dataseg();
     find_label();
-#ifndef DEBUG_ASS
     assembler.output.push_back(".text");
-#endif
     for (string &s : assembler.text_seg)
     {
         size_t i = s.find(':') == string::npos ? 0 : s.find(':') + 1;
@@ -1055,7 +1036,7 @@ public:
     | 
     dynamic_end_idx
     | <- dynamic data
-    dynamic_st_idx = static_end_idx
+    static_end_idx = dynamic_st_idx
     | <- data
     static_st_idx = 1 * 1024 * 1024
     |
@@ -1071,24 +1052,29 @@ public:
     typedef array<char, byte_size> byte_t;
     static const uint32_t base_vm = 0x400000;
     static const size_t memory_size = 6 * 1024 * 1024; // 6MB
-    array<byte_t, memory_size> memory;                 // char memory[memory_size][8]
+    inline static array<byte_t, memory_size> memory;   // char memory[memory_size][8]
     static const size_t reg_size = 34;
-    int32_t reg[reg_size];
-    size_t text_end_idx;
-    static const size_t static_st_idx = 1024 * 1024;
-    size_t dynamic_st_idx;
-    size_t dynamic_end_idx;
+    inline static int32_t reg[reg_size];
     static const size_t stack_end_idx = memory_size;
-    unordered_map<string, size_t> regcode_to_idx;
-    const vector<string> &input;
-    vector<string> output;
+    size_t dynamic_end_idx;
+    size_t static_end_idx = static_st_idx;
+    static const size_t static_st_idx = 1024 * 1024;
+    size_t text_end_idx = 0;
+
+    inline static unordered_map<string, size_t> regcode_to_idx;
     static const size_t v0 = 2;
     static const size_t a0 = 4;
     static const size_t a1 = 5;
     static const size_t a2 = 6;
+    static const size_t sp = 29;
     static const size_t lo = 32;
     static const size_t hi = 33;
+
     uint32_t pc;
+
+    const vector<string> &input;
+    inline static vector<string> output;
+    istream &instream;
     ostream &outstream;
 
     void store_word_to_memory(const word_t &word, uint32_t addr);
@@ -1100,15 +1086,15 @@ public:
     int32_t get_wordval_from_memory(uint32_t addr);
     int16_t get_halfval_from_memory(uint32_t addr);
     int8_t get_byteval_from_memory(uint32_t addr);
-    void gen_regcode_to_idx();
+    static void gen_regcode_to_idx();
     void store_static_data();
-    void init_reg_value();
+    static void init_reg_value();
     void store_text();
     void simulate();
-    size_t addr2idx(uint32_t vm);
-    size_t idx2addr(size_t idx);
-    Simulator(vector<string> &input_, ostream &outstream_ = cout)
-        : outstream(outstream_), input(input_) {}
+    static size_t addr2idx(uint32_t vm);
+    static size_t idx2addr(size_t idx);
+    Simulator(vector<string> &input_, istream &instream_ = cin, ostream &outstream_ = cout)
+        : instream(instream_), outstream(outstream_), input(input_) {}
 
     unordered_map<string, function<void(const string &)>> opcode_to_func;
     unordered_map<string, function<void(const string &)>> opcode_funct_to_func;
@@ -1119,12 +1105,12 @@ public:
     void gen_rt_to_func(unordered_map<string, function<void(const string &)>> &m);
     int32_t &get_regv(const string &reg_str);
     // lots of instruction functions
-    void signal_exception(const string &err)
+    static void signal_exception(const string &err)
     {
         cout << err << endl;
         exit(1);
     }
-    int32_t sign_extent(const string &imme)
+    static int32_t sign_extent(const string &imme)
     {
         int32_t imme_val = stoi(imme, nullptr, 2);
         int32_t sign_mask = 1 << 15;
@@ -2042,18 +2028,25 @@ public:
         {
         case 1: // print_int
         {
-            cout << (int32_t)reg[a0];
-            // outstream >>
+            outstream << reg[a0];
             break;
         }
         case 4: // print_string
         {
-            printf("%s", reg[a0]);
+            int32_t addr = reg[a0];
+            char ch = '\0';
+            do
+            {
+                byte_t byte = get_byte_from_memory(addr++);
+                string byte_str(&byte[0]);
+                ch = (stoi(byte_str) & 0b11111111);
+                outstream.put(ch);
+            } while (ch != '\0');
             break;
         }
         case 5: // read_int
         {
-            cin >> reg[v0];
+            instream >> reg[v0];
             break;
         }
         case 8: // read_string
@@ -2106,12 +2099,12 @@ public:
         }
         case 11: // print_char
         {
-            printf("%c", reg[a0]);
+            outstream.put(reg[a0]);
             break;
         }
         case 12: // read_char
         {
-            scanf("%c", &reg[v0]);
+            reg[v0] = instream.get();
             break;
         }
         case 13: // open
@@ -2180,11 +2173,11 @@ Simulator::word_t Simulator::get_word_from_memory(uint32_t addr)
 {
     word_t word;
     size_t idx = addr2idx(addr);
-    size_t j = 0;
+    size_t j = word.size() - 1;
     for (size_t i = idx; i < idx + 4; i++)
     {
         for (size_t k = 0; k < byte_size; k++)
-            word[j++] = memory[i][k];
+            word[j--] = memory[i][k];
     }
     return word;
 }
@@ -2396,39 +2389,62 @@ size_t Simulator::idx2addr(size_t idx)
 }
 void Simulator::init_reg_value()
 {
-    size_t sp_idx = 29;
-    reg[sp_idx] = 0xa00000;
+    reg[sp] = 0xa00000;
 }
 void Simulator::store_text()
 {
     size_t i;
-    for (i = 0; i < output.size(); i++)
+    for (i = 0; i < input.size(); i++)
     {
-        string s = output[i];
+        string s = input[i];
         if (s.find(".text") != string::npos)
         {
             ++i;
             break;
         }
     }
-    for (i; i < output.size(); i++)
+    for (i; i < input.size(); i++)
     {
         word_t word;
         for (size_t k = 0; k < word.size(); k++)
-            word[k] = output[i][k];
+            word[k] = input[i][k];
         store_word_to_memory(word, idx2addr(text_end_idx));
         text_end_idx += 4;
     }
 }
 void Simulator::simulate()
 {
+#ifdef DEBUG_ASS
+    cout << "---input mips---" << endl;
+    for (const string &s : input)
+        cout << s << endl;
+    cout << endl;
+#endif
     gen_regcode_to_idx();
-    gen_opcode_to_func(opcode_funct_to_func);
+    gen_opcode_to_func(opcode_to_func);
     gen_opcode_funct_to_func(opcode_funct_to_func);
     gen_rt_to_func(rt_to_func);
     init_reg_value();
     store_static_data();
     store_text();
+#ifdef DEBUG_SIM
+    cout << "---text seg---" << endl;
+    cout << "From 0 to " << text_end_idx << endl;
+    for (size_t i = 0; i < text_end_idx; i += 4)
+    {
+        for (char ch : get_word_from_memory(base_vm + i))
+            cout << ch;
+        cout << endl;
+    }
+    cout << "---static data seg---" << endl;
+    cout << "From " << static_st_idx << " to " << static_end_idx << endl;
+    for (size_t i = static_st_idx; i < static_end_idx; i += 4)
+    {
+        for (char ch : get_word_from_memory(base_vm + i))
+            cout << ch;
+        cout << endl;
+    }
+#endif
     // start simulating
     pc = base_vm;
 #ifdef DEBUG_SIM
@@ -2456,16 +2472,17 @@ void Simulator::store_static_data()
     store .data
     output[0] == ".data"
     */
-    for (size_t i = 1; i < output.size(); i++)
+    for (size_t i = 1; i < input.size(); i++)
     {
-        if (output[i].find(".text") == string::npos)
+        if (input[i].find(".text") != string::npos)
             break;
         word_t word;
         for (size_t k = 0; k < word.size(); k++)
-            word[k] = output[i][k];
-        store_word_to_memory(word, idx2addr(dynamic_st_idx));
-        dynamic_st_idx += 4;
+            word[k] = input[i][k];
+        store_word_to_memory(word, idx2addr(static_end_idx));
+        static_end_idx += 4;
     }
+    dynamic_end_idx = static_end_idx;
 }
 int main(int argc, char *argv[])
 {
@@ -2490,7 +2507,7 @@ int main(int argc, char *argv[])
         return 0;
     }
     Assembler assembler;
-    Simulator simulator(assembler.output, fileout);
+    Simulator simulator(assembler.output, filein, fileout);
     assembler.scanner.scan(asmin);
     assembler.parser.parse();
     simulator.simulate();
