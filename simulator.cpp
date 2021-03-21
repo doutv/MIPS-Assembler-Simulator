@@ -1561,6 +1561,7 @@ public:
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
+        get_regv(rt) = get_regv(rs) & imme_val;
     }
     void instr_ori(const string &mc)
     {
