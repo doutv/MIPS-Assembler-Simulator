@@ -1,4 +1,4 @@
-// #define DEBUG_ASS
+#define DEBUG_ASS
 // #define DEBUG_DATA
 #define DEBUG_SIM
 
@@ -17,6 +17,8 @@
 #include <unordered_map>
 #include <fstream>
 using namespace std;
+
+ofstream fileout; // TODO: why it needs to be global?
 
 class Assembler
 {
@@ -1076,9 +1078,9 @@ public:
     std::istream &instream;
     std::ostream &outstream;
 
-    void store_word_to_memory(const word_t &word, uint32_t addr);
-    void store_half_to_memory(const half_t &half, uint32_t addr);
-    void store_byte_to_memory(const byte_t &byte, uint32_t addr);
+    void store_word_to_memory(word_t word, uint32_t addr);
+    void store_half_to_memory(half_t half, uint32_t addr);
+    void store_byte_to_memory(byte_t byte, uint32_t addr);
     word_t get_word_from_memory(uint32_t addr);
     half_t get_half_from_memory(uint32_t addr);
     byte_t get_byte_from_memory(uint32_t addr);
@@ -1920,6 +1922,7 @@ public:
         word_t word;
         string word_str = bitset<word_size>(get_regv(rt)).to_string();
         copy(word_str.begin(), word_str.end(), word.data());
+        // reverse(word.begin(),word.end());
         store_word_to_memory(word, get_regv(rs) + imme_val);
     }
     void instr_swl(const string &mc)
@@ -2008,16 +2011,16 @@ public:
         imme = mc.substr(6, 26);
         int32_t imme_val = sign_extent(imme);
         int32_t pc_hi4 = pc & (((1 << 4) - 1) << 28);
-        pc = pc_hi4 | ((imme_val << 2) & ((1 << 28) - 1));
+        pc = pc_hi4 + ((imme_val << 2) & ((1 << 28) - 1));
     }
     void instr_jal(const string &mc)
     {
         string imme;
         imme = mc.substr(6, 26);
-        reg[31] = pc;
+        reg[31] = pc + 4;
         int32_t imme_val = sign_extent(imme);
         int32_t pc_hi4 = pc & (((1 << 4) - 1) << 28);
-        pc = pc_hi4 | ((imme_val << 2) & ((1 << 28) - 1));
+        pc = pc_hi4 + ((imme_val << 2) & ((1 << 28) - 1));
     }
 
     // O instructions
@@ -2028,22 +2031,22 @@ public:
         case 1: // print_int
         {
             outstream << reg[a0];
+            outstream.flush();
             break;
         }
         case 4: // print_string
         {
             int32_t addr = reg[a0];
             char ch = '\0';
-            do
+            while (ch = get_byteval_from_memory(addr++),ch!='\0')
             {
-                byte_t byte = get_byte_from_memory(addr++);
-                string byte_str(&byte[0], byte_size);
-                ch = stoi(byte_str, nullptr, 2);
                 outstream << ch;
-                #ifdef DEBUG_SIM
+                outstream.flush();
+#ifdef DEBUG_SIM
                 cout << ch;
-                #endif
-            } while (ch != '\0');
+                outstream.flush();
+#endif
+            } 
             break;
         }
         case 5: // read_int
@@ -2102,6 +2105,7 @@ public:
         case 11: // print_char
         {
             outstream << static_cast<char>(reg[a0] & numeric_limits<char>::max());
+            outstream.flush();
             break;
         }
         case 12: // read_char
@@ -2145,18 +2149,20 @@ int32_t &Simulator::get_regv(const string &reg_str)
     size_t idx = regcode_to_idx[reg_str];
     return reg[idx];
 }
-void Simulator::store_word_to_memory(const word_t &word, uint32_t addr)
+void Simulator::store_word_to_memory(word_t word, uint32_t addr)
 {
+    reverse(word.begin(),word.end());
     size_t idx = addr2idx(addr);
-    size_t j = word.size() - 1;
+    size_t j = 0;
     for (size_t i = idx; i < idx + 4; i++)
     {
         for (size_t k = 0; k < byte_size; k++)
-            memory[i][k] = word[j--];
+            memory[i][k] = word[j++];
     }
 }
-void Simulator::store_half_to_memory(const half_t &half, uint32_t addr)
+void Simulator::store_half_to_memory(half_t half, uint32_t addr)
 {
+    reverse(half.begin(),half.end());
     size_t idx = addr2idx(addr);
     size_t j = 0;
     for (size_t i = idx; i < idx + 2; i++)
@@ -2165,8 +2171,9 @@ void Simulator::store_half_to_memory(const half_t &half, uint32_t addr)
             memory[i][k] = half[j++];
     }
 }
-void Simulator::store_byte_to_memory(const byte_t &byte, uint32_t addr)
+void Simulator::store_byte_to_memory(byte_t byte, uint32_t addr)
 {
+    reverse(byte.begin(),byte.end());
     size_t idx = addr2idx(addr);
     size_t j = 0;
     for (size_t k = 0; k < byte_size; k++)
@@ -2176,12 +2183,13 @@ Simulator::word_t Simulator::get_word_from_memory(uint32_t addr)
 {
     word_t word;
     size_t idx = addr2idx(addr);
-    size_t j = word.size() - 1;
+    size_t j = 0;
     for (size_t i = idx; i < idx + 4; i++)
     {
         for (size_t k = 0; k < byte_size; k++)
-            word[j--] = memory[i][k];
+            word[j++] = memory[i][k];
     }
+    reverse(word.begin(),word.end());
     return word;
 }
 Simulator::byte_t Simulator::get_byte_from_memory(uint32_t addr)
@@ -2208,21 +2216,24 @@ Simulator::half_t Simulator::get_half_from_memory(uint32_t addr)
 int32_t Simulator::get_wordval_from_memory(uint32_t addr)
 {
     word_t word = get_word_from_memory(addr);
-    string word_str(&word[0]);
-    int32_t word_val = stoi(word_str, nullptr, 2);
+    string word_str(&word[0], word_size);
+    // reverse(word_str.begin(),word_str.end());
+    int32_t word_val = stoul(word_str, nullptr, 2);
     return word_val;
 }
 int16_t Simulator::get_halfval_from_memory(uint32_t addr)
 {
     half_t half = get_half_from_memory(addr);
-    string half_str(&half[0]);
+    string half_str(&half[0], half_size);
+    reverse(half_str.begin(),half_str.end());
     int16_t half_val = stoi(half_str, nullptr, 2);
     return half_val;
 }
 int8_t Simulator::get_byteval_from_memory(uint32_t addr)
 {
     byte_t byte = get_byte_from_memory(addr);
-    string byte_str(&byte[0]);
+    string byte_str(&byte[0], byte_size);
+    reverse(byte_str.begin(),byte_str.end());
     int8_t byte_val = stoi(byte_str, nullptr, 2);
     return byte_val;
 }
@@ -2411,6 +2422,7 @@ void Simulator::store_text()
         word_t word;
         for (size_t k = 0; k < word.size(); k++)
             word[k] = input[i][k];
+        // reverse(word.begin(),word.end());
         store_word_to_memory(word, idx2addr(text_end_idx));
         text_end_idx += 4;
     }
@@ -2435,7 +2447,9 @@ void Simulator::simulate()
     cout << "From 0 to " << text_end_idx << endl;
     for (size_t i = 0; i < text_end_idx; i += 4)
     {
-        for (char ch : get_word_from_memory(base_vm + i))
+        word_t word = get_word_from_memory(base_vm + i);
+        // reverse(word.begin(),word.end());
+        for (char ch:word)
             cout << ch;
         cout << endl;
     }
@@ -2443,7 +2457,9 @@ void Simulator::simulate()
     cout << "From " << static_st_idx << " to " << static_end_idx << endl;
     for (size_t i = static_st_idx; i < static_end_idx; i += 4)
     {
-        for (char ch : get_word_from_memory(base_vm + i))
+        word_t word = get_word_from_memory(base_vm + i);
+        // reverse(word.begin(),word.end());
+        for (char ch:word)
             cout << ch;
         cout << endl;
     }
@@ -2453,9 +2469,14 @@ void Simulator::simulate()
     while (pc >= base_vm && pc < idx2addr(text_end_idx))
     {
         word_t word = get_word_from_memory(pc);
+        pc += 4;
+        // reverse(word.begin(),word.end());
         string mc(begin(word), end(word));
         exec_instr(mc);
-        pc += 4;
+        #ifdef DEBUG_SIM
+        uint64_t mc_tmp = stoull(mc,nullptr,2);
+        cout << hex << "0x" << pc-4 << " " << hex << "0x" << mc_tmp <<endl;
+        #endif 
     }
 }
 void Simulator::gen_regcode_to_idx()
@@ -2479,12 +2500,12 @@ void Simulator::store_static_data()
         word_t word;
         for (size_t k = 0; k < word.size(); k++)
             word[k] = input[i][k];
+        // reverse(word.begin(),word.end());
         store_word_to_memory(word, idx2addr(static_end_idx));
         static_end_idx += 4;
     }
     dynamic_end_idx = static_end_idx;
 }
-ofstream fileout; // TODO: why it needs to be global?
 int main(int argc, char *argv[])
 {
     if (argc != 4)
@@ -2508,12 +2529,7 @@ int main(int argc, char *argv[])
         return 0;
     }
     Assembler assembler;
-#ifndef DEBUG_SIM
     Simulator simulator(assembler.output, filein, fileout);
-#endif
-#ifdef DEBUG_SIM
-    Simulator simulator(assembler.output, filein, cout);
-#endif
     assembler.scanner.scan(asmin);
     assembler.parser.parse();
     simulator.simulate();
