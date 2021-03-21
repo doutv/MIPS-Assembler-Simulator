@@ -1,4 +1,4 @@
-#define DEBUG_ASS
+// #define DEBUG_ASS
 // #define DEBUG_DATA
 #define DEBUG_SIM
 
@@ -193,35 +193,37 @@ string Assembler::Parser::get_ascii_data(const string &data)
             switch (data[i + 1])
             {
             case 'n':
-                res += bitset<8>((uint8_t)('\n')).to_string();
+                res = res + bitset<8>('\n').to_string();
                 break;
             case 't':
-                res += bitset<8>((uint8_t)('\t')).to_string();
+                res = res + bitset<8>('\t').to_string();
                 break;
             case '\'':
-                res += bitset<8>((uint8_t)('\'')).to_string();
+                res = res + bitset<8>('\'').to_string();
                 break;
             case '\"':
-                res += bitset<8>((uint8_t)('\"')).to_string();
+                res = res + bitset<8>('\"').to_string();
                 break;
             case '\\':
-                res += bitset<8>((uint8_t)('\\')).to_string();
+                res = res + bitset<8>('\\').to_string();
                 break;
             default:
                 break;
             }
+            ++i;
         }
         else
         {
-            res += bitset<8>((uint8_t)(data[i])).to_string();
+            res = bitset<8>(data[i]).to_string() + res;
         }
     }
     return res;
 }
 void Assembler::Parser::process_dataseg()
 {
+    const string null_str = "00000000";
     output.push_back(".data");
-    for (string &s : assembler.data_seg)
+    for (string s : assembler.data_seg)
     {
         string target_str, tmp;
         size_t st_idx, end_idx;
@@ -234,7 +236,7 @@ void Assembler::Parser::process_dataseg()
             end_idx = s.find('\"', st_idx);
             tmp = s.substr(st_idx, end_idx - st_idx);
             // add \0 terminator
-            tmp = get_ascii_data(tmp) + bitset<8>(static_cast<unsigned long long>('\0')).to_string();
+            tmp = null_str + get_ascii_data(tmp);
             assembler.output.push_back(tmp);
         }
         else if (s.find(".ascii") != string::npos)
@@ -312,19 +314,16 @@ void Assembler::Parser::process_dataseg()
         string s = assembler.output[i];
         if (s.find(".data") != string::npos)
             continue;
-        if (s.size() > 32)
+        while (s.size() > 32)
         {
-            while (s.size() > 32)
-            {
-                assembler.output.insert(assembler.output.begin() + i, s.substr(0, 32));
-                ++i;
-                s = s.substr(32, string::npos);
-                if (s.size() <= 32)
-                    assembler.output[i] = s;
-            }
+            assembler.output.insert(assembler.output.begin() + i, s.substr(s.size() - 32, 32));
+            ++i;
+            s = s.substr(0, s.size() - 32);
+            if (!s.empty() && s.size() <= 32)
+                assembler.output[i] = s;
         }
-        while (assembler.output[i].size() < 32)
-            assembler.output[i].push_back('0');
+        if (assembler.output[i].size() < 32)
+            assembler.output[i] = string(32 - assembler.output[i].size(), '0') + assembler.output[i];
     }
 }
 void Assembler::Parser::find_label()
@@ -464,7 +463,7 @@ string Assembler::Parser::zero_extent(const string &s, const size_t target)
     e.g. "4" -> "0"*(target-3)+"100"
     */
     string res;
-    int32_t num = stoi(s);
+    int32_t num = stoi(s, nullptr, 10);
     switch (target)
     {
     case 5:
@@ -1074,8 +1073,8 @@ public:
 
     const vector<string> &input;
     inline static vector<string> output;
-    istream &instream;
-    ostream &outstream;
+    std::istream &instream;
+    std::ostream &outstream;
 
     void store_word_to_memory(const word_t &word, uint32_t addr);
     void store_half_to_memory(const half_t &half, uint32_t addr);
@@ -1093,8 +1092,8 @@ public:
     void simulate();
     static size_t addr2idx(uint32_t vm);
     static size_t idx2addr(size_t idx);
-    Simulator(vector<string> &input_, istream &instream_ = cin, ostream &outstream_ = cout)
-        : instream(instream_), outstream(outstream_), input(input_) {}
+    Simulator(vector<string> &input_, std::istream &instream_, std::ostream &outstream_)
+        : input(input_), instream(instream_), outstream(outstream_) {}
 
     unordered_map<string, function<void(const string &)>> opcode_to_func;
     unordered_map<string, function<void(const string &)>> opcode_funct_to_func;
@@ -1568,7 +1567,7 @@ public:
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
-        get_regv(rt) = ~(get_regv(rs) | imme_val);
+        get_regv(rt) = get_regv(rs) | imme_val;
     }
     void instr_xori(const string &mc)
     {
@@ -2038,9 +2037,12 @@ public:
             do
             {
                 byte_t byte = get_byte_from_memory(addr++);
-                string byte_str(&byte[0]);
-                ch = (stoi(byte_str) & 0b11111111);
-                outstream.put(ch);
+                string byte_str(&byte[0], byte_size);
+                ch = stoi(byte_str, nullptr, 2);
+                outstream << ch;
+                #ifdef DEBUG_SIM
+                cout << ch;
+                #endif
             } while (ch != '\0');
             break;
         }
@@ -2099,7 +2101,7 @@ public:
         }
         case 11: // print_char
         {
-            outstream.put(reg[a0]);
+            outstream << static_cast<char>(reg[a0] & numeric_limits<char>::max());
             break;
         }
         case 12: // read_char
@@ -2140,16 +2142,17 @@ public:
 };
 int32_t &Simulator::get_regv(const string &reg_str)
 {
-    return reg[regcode_to_idx[reg_str]];
+    size_t idx = regcode_to_idx[reg_str];
+    return reg[idx];
 }
 void Simulator::store_word_to_memory(const word_t &word, uint32_t addr)
 {
     size_t idx = addr2idx(addr);
-    size_t j = 0;
+    size_t j = word.size() - 1;
     for (size_t i = idx; i < idx + 4; i++)
     {
         for (size_t k = 0; k < byte_size; k++)
-            memory[i][k] = word[j++];
+            memory[i][k] = word[j--];
     }
 }
 void Simulator::store_half_to_memory(const half_t &half, uint32_t addr)
@@ -2447,10 +2450,7 @@ void Simulator::simulate()
 #endif
     // start simulating
     pc = base_vm;
-#ifdef DEBUG_SIM
-    exec_instr("00100000100001000000000000000001");
-#endif
-    while (pc >= base_vm && pc < text_end_idx)
+    while (pc >= base_vm && pc < idx2addr(text_end_idx))
     {
         word_t word = get_word_from_memory(pc);
         string mc(begin(word), end(word));
@@ -2460,7 +2460,7 @@ void Simulator::simulate()
 }
 void Simulator::gen_regcode_to_idx()
 {
-    for (size_t i = 0; i < reg_size; i++)
+    for (size_t i = 0; i < 32; i++)
     {
         string s = bitset<5>(i).to_string();
         regcode_to_idx[s] = i;
@@ -2484,32 +2484,41 @@ void Simulator::store_static_data()
     }
     dynamic_end_idx = static_end_idx;
 }
+ofstream fileout; // TODO: why it needs to be global?
 int main(int argc, char *argv[])
 {
     if (argc != 4)
         cout << "Missing Argument!" << endl;
     ifstream asmin(argv[1]);
     ifstream filein(argv[2]);
-    ofstream fileout(argv[3]);
+    fileout.open(argv[3]);
     if (!asmin.is_open())
     {
-        cout << argv[1] << "can not open" << endl;
+        cout << argv[1] << " can not open" << endl;
         return 0;
     }
     if (!filein.is_open())
     {
-        cout << argv[2] << "can not open" << endl;
+        cout << argv[2] << " can not open" << endl;
         return 0;
     }
     if (!fileout.is_open())
     {
-        cout << argv[3] << "can not open" << endl;
+        cout << argv[3] << " can not open" << endl;
         return 0;
     }
     Assembler assembler;
+#ifndef DEBUG_SIM
     Simulator simulator(assembler.output, filein, fileout);
+#endif
+#ifdef DEBUG_SIM
+    Simulator simulator(assembler.output, filein, cout);
+#endif
     assembler.scanner.scan(asmin);
     assembler.parser.parse();
     simulator.simulate();
+    asmin.close();
+    filein.close();
+    fileout.close();
     return 0;
 }
