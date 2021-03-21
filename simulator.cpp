@@ -1140,8 +1140,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
-        if (__builtin_add_overflow(get_regv(rs), get_regv(rt), &get_regv(rd)))
-            signal_exception("overflow");
+        get_regv(rd) = get_regv(rs) + get_regv(rt);
     }
     void instr_and(const string &mc)
     {
@@ -1159,7 +1158,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
-        size_t cnt = 0;
+        size_t cnt = 32;
         for (size_t i = 31; i >= 0; i--)
         {
             if (get_regv(rs) & (1 << i) == 0)
@@ -1177,7 +1176,7 @@ public:
         rt = mc.substr(11, 5);
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
-        size_t cnt = 0;
+        size_t cnt = 32;
         for (size_t i = 31; i >= 0; i--)
         {
             if (get_regv(rs) & (1 << i))
@@ -1216,7 +1215,7 @@ public:
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
         int64_t tmp = (int64_t)get_regv(rs) * (int64_t)get_regv(rt);
-        reg[lo] = tmp & numeric_limits<int32_t>::max();
+        reg[lo] = tmp;
         reg[hi] = tmp >> 32;
     }
     void instr_multu(const string &mc)
@@ -1227,7 +1226,7 @@ public:
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
         uint64_t tmp = (uint64_t)get_regv(rs) * (uint64_t)get_regv(rt);
-        reg[lo] = tmp & numeric_limits<uint32_t>::max();
+        reg[lo] = tmp;
         reg[hi] = tmp >> 32;
     }
     void instr_mul(const string &mc)
@@ -1248,7 +1247,7 @@ public:
         rd = mc.substr(16, 5);
         shamt = mc.substr(21, 5);
         int64_t tmp = (((int64_t)reg[hi] << 32) | reg[lo]) + ((int64_t)get_regv(rs) * get_regv(rt));
-        reg[lo] = tmp & numeric_limits<int32_t>::max();
+        reg[lo] = tmp;
         reg[hi] = tmp >> 32;
     }
     void instr_msub(const string &mc)
@@ -1638,7 +1637,7 @@ public:
         imme = mc.substr(16, 16);
         int32_t offset = sign_extent(imme);
         offset <<= 2;
-        reg[31] = pc + 4;
+        reg[31] = pc;
         if (get_regv(rs) >= 0)
             pc += offset;
     }
@@ -1672,6 +1671,7 @@ public:
         imme = mc.substr(16, 16);
         int32_t offset = sign_extent(imme);
         offset <<= 2;
+        reg[31] = pc;
         if (get_regv(rs) < 0)
             pc += offset;
     }
@@ -1777,8 +1777,8 @@ public:
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
-        int32_t byte_val = get_byteval_from_memory(get_regv(rs) + imme_val);
-        int32_t mask = 1 << 7;
+        int8_t byte_val = get_byteval_from_memory(get_regv(rs) + imme_val);
+        int8_t mask = 1 << 7;
         bool sign = (byte_val & mask == mask) ? 1 : 0;
         get_regv(rt) = sign ? (((1 << 24) - 1) << 8) & byte_val : byte_val;
     }
@@ -1789,8 +1789,8 @@ public:
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
-        int32_t tmp = get_byteval_from_memory(get_regv(rs) + imme_val);
-        get_regv(rt) = tmp & ((1 << 8) - 1);
+        int8_t tmp = get_byteval_from_memory(get_regv(rs) + imme_val);
+        get_regv(rt) = tmp & numeric_limits<int8_t>::max();
     }
     void instr_lh(const string &mc)
     {
@@ -1808,8 +1808,8 @@ public:
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
-        int32_t tmp = get_byteval_from_memory(get_regv(rs) + imme_val);
-        get_regv(rt) = tmp & ((1 << 16) - 1);
+        int16_t tmp = get_byteval_from_memory(get_regv(rs) + imme_val);
+        get_regv(rt) = tmp & numeric_limits<int16_t>::max();
     }
     void instr_lw(const string &mc)
     {
@@ -1830,7 +1830,8 @@ public:
         int32_t init_val = get_regv(rt);
         int32_t addr = get_regv(rt) + imme_val;
         int32_t word_val = get_wordval_from_memory(addr);
-        int32_t lowbit_2 = get_regv(rs) & ((1 << 2) - 1);
+        int32_t rs_val = stoi(rs, nullptr, 2);
+        int32_t lowbit_2 = rs_val & ((1 << 2) - 1);
         switch (lowbit_2)
         {
         case 0:
@@ -1859,20 +1860,21 @@ public:
         int32_t init_val = get_regv(rt);
         int32_t addr = get_regv(rt) + imme_val;
         int32_t word_val = get_wordval_from_memory(addr);
-        int32_t lowbit_2 = get_regv(rs) & ((1 << 2) - 1);
+        int32_t rs_val = stoi(rs, nullptr, 2);
+        int32_t lowbit_2 = rs_val & ((1 << 2) - 1);
         switch (lowbit_2)
         {
         case 0:
             get_regv(rt) = word_val;
             break;
         case 1:
-            get_regv(rt) = word_val >> 8 + (init_val & (0b11111111 << 24));
+            get_regv(rt) = (word_val >> 8) + (init_val & (0b11111111 << 24));
             break;
         case 2:
-            get_regv(rt) = word_val >> 16 + (init_val & ((1 << 16) - 1));
+            get_regv(rt) = (word_val >> 16) + (init_val & ((1 << 16) - 1));
             break;
         case 3:
-            get_regv(rt) = word_val >> 24 + (init_val & ((1 << 24) - 1));
+            get_regv(rt) = (word_val >> 24) + (init_val & ((1 << 24) - 1));
             break;
         default:
             break;
@@ -1894,10 +1896,8 @@ public:
         rt = mc.substr(11, 5);
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
-        int32_t tmp = get_regv(rt);
-        tmp = tmp & ((1 << 8) - 1);
         byte_t byte;
-        string byte_str = bitset<byte_size>(tmp).to_string();
+        string byte_str = bitset<byte_size>((int8_t)get_regv(rt)).to_string();
         copy(byte_str.begin(), byte_str.end(), byte.data());
         store_byte_to_memory(byte, get_regv(rs) + imme_val);
     }
@@ -1909,7 +1909,7 @@ public:
         imme = mc.substr(16, 16);
         int32_t imme_val = sign_extent(imme);
         half_t half;
-        string half_str = bitset<half_size>(get_regv(rt)).to_string();
+        string half_str = bitset<half_size>((int16_t)get_regv(rt)).to_string();
         copy(half_str.begin(), half_str.end(), half.data());
         store_half_to_memory(half, get_regv(rs) + imme_val);
     }
@@ -1923,7 +1923,6 @@ public:
         word_t word;
         string word_str = bitset<word_size>(get_regv(rt)).to_string();
         copy(word_str.begin(), word_str.end(), word.data());
-        // reverse(word.begin(),word.end());
         store_word_to_memory(word, get_regv(rs) + imme_val);
     }
     void instr_swl(const string &mc)
@@ -1935,8 +1934,9 @@ public:
         int32_t imme_val = sign_extent(imme);
         int32_t init_val = get_regv(rt);
         int32_t addr = get_regv(rt) + imme_val;
-        int32_t lowbit_2 = get_regv(rs) & ((1 << 2) - 1);
         int32_t word_val = get_wordval_from_memory(addr);
+        int32_t rs_val = stoi(rs, nullptr, 2);
+        int32_t lowbit_2 = rs_val & ((1 << 2) - 1);
         switch (lowbit_2)
         {
         case 0:
@@ -1968,8 +1968,9 @@ public:
         int32_t imme_val = sign_extent(imme);
         int32_t init_val = get_regv(rt);
         int32_t addr = get_regv(rt) + imme_val;
-        int32_t lowbit_2 = get_regv(rs) & ((1 << 2) - 1);
         int32_t word_val = get_wordval_from_memory(addr);
+        int32_t rs_val = stoi(rs, nullptr, 2);
+        int32_t lowbit_2 = rs_val & ((1 << 2) - 1);
         switch (lowbit_2)
         {
         case 0:
@@ -2039,7 +2040,7 @@ public:
         {
             int32_t addr = reg[a0];
             char ch = '\0';
-            while (ch = get_byteval_from_memory(addr++),ch!='\0')
+            while (ch = get_byteval_from_memory(addr++), ch != '\0')
             {
                 outstream << ch;
                 outstream.flush();
@@ -2047,7 +2048,7 @@ public:
                 cout << ch;
                 outstream.flush();
 #endif
-            } 
+            }
             break;
         }
         case 5: // read_int
@@ -2094,19 +2095,25 @@ public:
         }
         case 9: // sbrk
         {
-            reg[v0] = dynamic_end_idx;
+            reg[v0] = idx2addr(dynamic_end_idx);
             dynamic_end_idx += reg[a0];
             break;
         }
         case 10: // exit
         {
+            // outstream.flush();
             exit(0);
             break;
         }
         case 11: // print_char
         {
-            outstream << static_cast<char>(reg[a0] & numeric_limits<char>::max());
+            char ch = reg[a0] & numeric_limits<char>::max();
+            outstream << ch;
             outstream.flush();
+#ifdef DEBUG_SIM
+            cout << ch;
+            outstream.flush();
+#endif
             break;
         }
         case 12: // read_char
@@ -2152,7 +2159,7 @@ int32_t &Simulator::get_regv(const string &reg_str)
 }
 void Simulator::store_word_to_memory(word_t word, uint32_t addr)
 {
-    reverse(word.begin(),word.end());
+    reverse(word.begin(), word.end());
     size_t idx = addr2idx(addr);
     size_t j = 0;
     for (size_t i = idx; i < idx + 4; i++)
@@ -2163,7 +2170,7 @@ void Simulator::store_word_to_memory(word_t word, uint32_t addr)
 }
 void Simulator::store_half_to_memory(half_t half, uint32_t addr)
 {
-    reverse(half.begin(),half.end());
+    reverse(half.begin(), half.end());
     size_t idx = addr2idx(addr);
     size_t j = 0;
     for (size_t i = idx; i < idx + 2; i++)
@@ -2174,7 +2181,7 @@ void Simulator::store_half_to_memory(half_t half, uint32_t addr)
 }
 void Simulator::store_byte_to_memory(byte_t byte, uint32_t addr)
 {
-    reverse(byte.begin(),byte.end());
+    reverse(byte.begin(), byte.end());
     size_t idx = addr2idx(addr);
     size_t j = 0;
     for (size_t k = 0; k < byte_size; k++)
@@ -2190,7 +2197,7 @@ Simulator::word_t Simulator::get_word_from_memory(uint32_t addr)
         for (size_t k = 0; k < byte_size; k++)
             word[j++] = memory[i][k];
     }
-    reverse(word.begin(),word.end());
+    reverse(word.begin(), word.end());
     return word;
 }
 Simulator::byte_t Simulator::get_byte_from_memory(uint32_t addr)
@@ -2200,6 +2207,7 @@ Simulator::byte_t Simulator::get_byte_from_memory(uint32_t addr)
     size_t j = 0;
     for (size_t k = 0; k < byte_size; k++)
         byte[j++] = memory[idx][k];
+    reverse(byte.begin(), byte.end());
     return byte;
 }
 Simulator::half_t Simulator::get_half_from_memory(uint32_t addr)
@@ -2212,13 +2220,13 @@ Simulator::half_t Simulator::get_half_from_memory(uint32_t addr)
         for (size_t k = 0; k < byte_size; k++)
             half[j++] = memory[i][k];
     }
+    reverse(half.begin(), half.end());
     return half;
 }
 int32_t Simulator::get_wordval_from_memory(uint32_t addr)
 {
     word_t word = get_word_from_memory(addr);
     string word_str(&word[0], word_size);
-    // reverse(word_str.begin(),word_str.end());
     int32_t word_val = stoul(word_str, nullptr, 2);
     return word_val;
 }
@@ -2226,7 +2234,6 @@ int16_t Simulator::get_halfval_from_memory(uint32_t addr)
 {
     half_t half = get_half_from_memory(addr);
     string half_str(&half[0], half_size);
-    reverse(half_str.begin(),half_str.end());
     int16_t half_val = stoi(half_str, nullptr, 2);
     return half_val;
 }
@@ -2234,7 +2241,6 @@ int8_t Simulator::get_byteval_from_memory(uint32_t addr)
 {
     byte_t byte = get_byte_from_memory(addr);
     string byte_str(&byte[0], byte_size);
-    reverse(byte_str.begin(),byte_str.end());
     int8_t byte_val = stoi(byte_str, nullptr, 2);
     return byte_val;
 }
@@ -2423,7 +2429,6 @@ void Simulator::store_text()
         word_t word;
         for (size_t k = 0; k < word.size(); k++)
             word[k] = input[i][k];
-        // reverse(word.begin(),word.end());
         store_word_to_memory(word, idx2addr(text_end_idx));
         text_end_idx += 4;
     }
@@ -2449,8 +2454,7 @@ void Simulator::simulate()
     for (size_t i = 0; i < text_end_idx; i += 4)
     {
         word_t word = get_word_from_memory(base_vm + i);
-        // reverse(word.begin(),word.end());
-        for (char ch:word)
+        for (char ch : word)
             cout << ch;
         cout << endl;
     }
@@ -2459,8 +2463,7 @@ void Simulator::simulate()
     for (size_t i = static_st_idx; i < static_end_idx; i += 4)
     {
         word_t word = get_word_from_memory(base_vm + i);
-        // reverse(word.begin(),word.end());
-        for (char ch:word)
+        for (char ch : word)
             cout << ch;
         cout << endl;
     }
@@ -2471,13 +2474,12 @@ void Simulator::simulate()
     {
         word_t word = get_word_from_memory(pc);
         pc += 4;
-        // reverse(word.begin(),word.end());
         string mc(begin(word), end(word));
+#ifdef DEBUG_SIM
+        uint64_t mc_tmp = stoull(mc, nullptr, 2);
+        cout << hex << "0x" << pc - 4 << " " << hex << "0x" << mc_tmp << endl;
+#endif
         exec_instr(mc);
-        #ifdef DEBUG_SIM
-        uint64_t mc_tmp = stoull(mc,nullptr,2);
-        cout << hex << "0x" << pc-4 << " " << hex << "0x" << mc_tmp <<endl;
-        #endif 
     }
 }
 void Simulator::gen_regcode_to_idx()
@@ -2501,7 +2503,6 @@ void Simulator::store_static_data()
         word_t word;
         for (size_t k = 0; k < word.size(); k++)
             word[k] = input[i][k];
-        // reverse(word.begin(),word.end());
         store_word_to_memory(word, idx2addr(static_end_idx));
         static_end_idx += 4;
     }
