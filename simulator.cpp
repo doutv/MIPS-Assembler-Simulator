@@ -2017,7 +2017,7 @@ public:
     {
         string imme;
         imme = mc.substr(6, 26);
-        reg[31] = pc + 4;
+        reg[31] = pc;
         int32_t imme_val = sign_extent(imme);
         int32_t pc_hi4 = pc & (((1 << 4) - 1) << 28);
         pc = pc_hi4 + ((imme_val << 2) & ((1 << 28) - 1));
