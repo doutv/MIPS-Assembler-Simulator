@@ -16,6 +16,7 @@
 #include <vector>
 #include <unordered_map>
 #include <fstream>
+#include <stdexcept>
 using namespace std;
 
 class Assembler
@@ -1109,8 +1110,7 @@ public:
     // lots of instruction functions
     static void signal_exception(const string &err)
     {
-        cout << err << endl;
-        exit(1);
+        throw invalid_argument(err);
     }
     static int32_t sign_extent(const string &imme)
     {
@@ -2102,7 +2102,7 @@ public:
         }
         case 10: // exit
         {
-            exit(0);
+            throw invalid_argument("syscall 10 exit(0)");
             break;
         }
         case 11: // print_char
@@ -2173,7 +2173,7 @@ public:
         }
         case 17:
         {
-            exit(reg[a0]);
+            throw invalid_argument("syscall 17 exit(reg[a0])");
             break;
         default:
             break;
@@ -2540,7 +2540,6 @@ void Simulator::store_static_data()
     }
     dynamic_end_idx = static_end_idx;
 }
-ofstream simout;
 int main(int argc, char *argv[])
 {
     if (argc == 3)
@@ -2558,19 +2557,26 @@ int main(int argc, char *argv[])
             cout << argv[2] << " can not open" << endl;
             return 0;
         }
-        Assembler assembler;
-        assembler.scanner.scan(asmin);
-        assembler.parser.parse();
-        assembler.parser.print_machine_code(asmout);
-        asmin.close();
-        asmout.close();
+        try
+        {
+            Assembler assembler;
+            assembler.scanner.scan(asmin);
+            assembler.parser.parse();
+            assembler.parser.print_machine_code(asmout);
+            asmin.close();
+            asmout.close();
+        }
+        catch (const exception &e)
+        {
+            cerr << e.what() << endl;
+        }
     }
     else if (argc == 4)
     {
         // assembler + simulator
         ifstream asmin(argv[1]);
         ifstream simin(argv[2]);
-        simout.open(argv[3]);
+        ofstream simout(argv[3]);
         if (!asmin.is_open())
         {
             cout << argv[1] << " can not open" << endl;
@@ -2586,14 +2592,21 @@ int main(int argc, char *argv[])
             cout << argv[3] << " can not open" << endl;
             return 0;
         }
-        Assembler assembler;
-        Simulator simulator(assembler.output, simin, simout);
-        assembler.scanner.scan(asmin);
-        assembler.parser.parse();
-        simulator.simulate();
-        asmin.close();
-        simin.close();
-        simout.close();
+        try
+        {
+            Assembler assembler;
+            Simulator simulator(assembler.output, simin, simout);
+            assembler.scanner.scan(asmin);
+            assembler.parser.parse();
+            simulator.simulate();
+            asmin.close();
+            simin.close();
+            simout.close();
+        }
+        catch (const exception &e)
+        {
+            cerr << e.what() << endl;
+        }
     }
     else
     {
