@@ -2400,7 +2400,7 @@ void Simulator::exec_instr(const string &mc)
         auto it = opcode_funct_to_func.find(opcode + funct);
         if (it == opcode_funct_to_func.end())
         {
-            cout << "function not found!" << endl;
+            signal_exception("function not found!");
         }
         (it->second)(mc);
     }
@@ -2411,7 +2411,7 @@ void Simulator::exec_instr(const string &mc)
         auto it = rt_to_func.find(rt);
         if (it == rt_to_func.end())
         {
-            cout << "function not found!" << endl;
+            signal_exception("function not found!");
         }
         (it->second)(mc);
     }
