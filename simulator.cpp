@@ -1,4 +1,4 @@
-#define DEBUG_ASS
+// #define DEBUG_ASS
 // #define DEBUG_DATA
 #define DEBUG_SIM
 
@@ -208,6 +208,9 @@ string Assembler::Parser::get_ascii_data(const string &data)
                 break;
             case '\\':
                 res = res + bitset<8>('\\').to_string();
+                break;
+            case 'r':
+                res = res + bitset<8>('\r').to_string();
                 break;
             default:
                 break;
@@ -2129,12 +2132,41 @@ public:
         }
         case 14: // read
         {
-            reg[v0] = read(reg[a0], reinterpret_cast<void *>(reg[a1]), reg[a2]);
+            size_t len = reg[a2];
+            uint8_t *buffptr = new uint8_t [len];
+            reg[v0] = read(reg[a0], buffptr, len);
+            if (reg[v0] == -1)
+                signal_exception("Read fail");
+            uint32_t addr = reg[a1];
+            for (size_t i = 0; i < reg[v0]; i++)
+            {
+                byte_t byte;
+                string byte_str = bitset<byte_size>(*(buffptr + i)).to_string();
+                copy(byte_str.begin(), byte_str.end(), byte.data());
+                store_byte_to_memory(byte, addr++);
+            }
+            delete[] buffptr;
             break;
         }
         case 15: // write
         {
-            reg[v0] = write(reg[a0], reinterpret_cast<const void *>(reg[a1]), reg[a2]);
+            // write to outstream
+            // uint32_t addr = reg[a1];
+            // for (size_t i = 0; i < reg[a2]; i++)
+            // {
+            //     outstream << get_byteval_from_memory(addr++);
+            // }
+            // call write()
+            size_t len = reg[a2];
+            int8_t *buffptr = new int8_t [len];
+            uint32_t addr = reg[a1];
+            for (size_t i = 0; i < len; i++)
+            {
+                *(buffptr+i) = get_byteval_from_memory(addr++);
+            }
+            reg[v0] = write(reg[a0], buffptr, len);
+            if (reg[v0]==-1)
+                signal_exception("Write fail");
             break;
         }
         case 16:
@@ -2475,11 +2507,12 @@ void Simulator::simulate()
         word_t word = get_word_from_memory(pc);
         pc += 4;
         string mc(begin(word), end(word));
+        exec_instr(mc);
 #ifdef DEBUG_SIM
         uint64_t mc_tmp = stoull(mc, nullptr, 2);
         cout << hex << "0x" << pc - 4 << " " << hex << "0x" << mc_tmp << endl;
+        bool for_debug_breakpoint = 1;
 #endif
-        exec_instr(mc);
     }
 }
 void Simulator::gen_regcode_to_idx()
