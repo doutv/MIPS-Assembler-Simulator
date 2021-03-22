@@ -184,7 +184,7 @@ If you want to add test cases, you can either test them using CLI or add your fi
 2. makefile
    * Required files to test Assembler:
      * `<test>.asm` MIPS assembly code 
-     * `<test>.asmout` sample output of Assembler
+     * `<test>.asmout` sample output of Assembler, including both `.data` and `.text`, please refer to `.asmout`.
    * Required files to test both Assembler and Simulator:
      * `<test>.asm` MIPS assembly code
      * `<test>.in` input file
