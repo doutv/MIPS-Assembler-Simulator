@@ -18,8 +18,6 @@
 #include <fstream>
 using namespace std;
 
-ofstream fileout; // TODO: why it needs to be global?
-
 class Assembler
 {
 public:
@@ -1078,8 +1076,8 @@ public:
 
     const vector<string> &input;
     inline static vector<string> output;
-    std::istream &instream;
-    std::ostream &outstream;
+    istream &instream;
+    ostream &outstream;
 
     void store_word_to_memory(word_t word, uint32_t addr);
     void store_half_to_memory(half_t half, uint32_t addr);
@@ -2133,7 +2131,7 @@ public:
         case 14: // read
         {
             size_t len = reg[a2];
-            uint8_t *buffptr = new uint8_t [len];
+            uint8_t *buffptr = new uint8_t[len];
             reg[v0] = read(reg[a0], buffptr, len);
             if (reg[v0] == -1)
                 signal_exception("Read fail");
@@ -2495,7 +2493,7 @@ void Simulator::simulate()
     for (size_t i = static_st_idx; i < static_end_idx; i += 4)
     {
         word_t word = get_word_from_memory(base_vm + i);
-        int32_t word_val = get_wordval_from_memory(base_vm+i);
+        int32_t word_val = get_wordval_from_memory(base_vm + i);
         cout << word_val << " ";
         for (char ch : word)
             cout << ch;
@@ -2545,33 +2543,62 @@ void Simulator::store_static_data()
 }
 int main(int argc, char *argv[])
 {
-    if (argc != 4)
+    if (argc == 3)
+    {
+        // assembler only
+        ifstream asmin(argv[1]);
+        ofstream asmout(argv[2]);
+        if (!asmin.is_open())
+        {
+            cout << argv[1] << " can not open" << endl;
+            return 0;
+        }
+        if (!asmout.is_open())
+        {
+            cout << argv[2] << " can not open" << endl;
+            return 0;
+        }
+        Assembler assembler;
+        assembler.scanner.scan(asmin);
+        assembler.parser.parse();
+        assembler.parser.print_machine_code(asmout);
+        asmin.close();
+        asmout.close();
+    }
+    else if (argc == 4)
+    {
+        // assembler + simulator
+        ifstream asmin(argv[1]);
+        ifstream filein(argv[2]);
+        ofstream fileout;
+        fileout.open(argv[3]);
+        if (!asmin.is_open())
+        {
+            cout << argv[1] << " can not open" << endl;
+            return 0;
+        }
+        if (!filein.is_open())
+        {
+            cout << argv[2] << " can not open" << endl;
+            return 0;
+        }
+        if (!fileout.is_open())
+        {
+            cout << argv[3] << " can not open" << endl;
+            return 0;
+        }
+        Assembler assembler;
+        Simulator simulator(assembler.output, filein, fileout);
+        assembler.scanner.scan(asmin);
+        assembler.parser.parse();
+        simulator.simulate();
+        asmin.close();
+        filein.close();
+        fileout.close();
+    }
+    else
+    {
         cout << "Missing Argument!" << endl;
-    ifstream asmin(argv[1]);
-    ifstream filein(argv[2]);
-    fileout.open(argv[3]);
-    if (!asmin.is_open())
-    {
-        cout << argv[1] << " can not open" << endl;
-        return 0;
     }
-    if (!filein.is_open())
-    {
-        cout << argv[2] << " can not open" << endl;
-        return 0;
-    }
-    if (!fileout.is_open())
-    {
-        cout << argv[3] << " can not open" << endl;
-        return 0;
-    }
-    Assembler assembler;
-    Simulator simulator(assembler.output, filein, fileout);
-    assembler.scanner.scan(asmin);
-    assembler.parser.parse();
-    simulator.simulate();
-    asmin.close();
-    filein.close();
-    fileout.close();
     return 0;
 }
