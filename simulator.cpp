@@ -1,6 +1,6 @@
 // #define DEBUG_ASS
 // #define DEBUG_DATA
-#define DEBUG_SIM
+// #define DEBUG_SIM
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -195,22 +195,22 @@ string Assembler::Parser::get_ascii_data(const string &data)
             switch (data[i + 1])
             {
             case 'n':
-                res = res + bitset<8>('\n').to_string();
+                res = bitset<8>('\n').to_string() + res;
                 break;
             case 't':
-                res = res + bitset<8>('\t').to_string();
+                res = bitset<8>('\t').to_string() + res;
                 break;
             case '\'':
-                res = res + bitset<8>('\'').to_string();
+                res = bitset<8>('\'').to_string() + res;
                 break;
             case '\"':
-                res = res + bitset<8>('\"').to_string();
+                res = bitset<8>('\"').to_string() + res;
                 break;
             case '\\':
-                res = res + bitset<8>('\\').to_string();
+                res = bitset<8>('\\').to_string() + res;
                 break;
             case 'r':
-                res = res + bitset<8>('\r').to_string();
+                res = bitset<8>('\r').to_string() + res;
                 break;
             default:
                 break;
@@ -2151,22 +2151,22 @@ public:
         case 15: // write
         {
             // write to outstream
-            // uint32_t addr = reg[a1];
-            // for (size_t i = 0; i < reg[a2]; i++)
-            // {
-            //     outstream << get_byteval_from_memory(addr++);
-            // }
-            // call write()
-            size_t len = reg[a2];
-            int8_t *buffptr = new int8_t [len];
             uint32_t addr = reg[a1];
-            for (size_t i = 0; i < len; i++)
+            for (size_t i = 0; i < reg[a2]; i++)
             {
-                *(buffptr+i) = get_byteval_from_memory(addr++);
+                outstream << get_byteval_from_memory(addr++);
             }
-            reg[v0] = write(reg[a0], buffptr, len);
-            if (reg[v0]==-1)
-                signal_exception("Write fail");
+            // call write()
+            // size_t len = reg[a2];
+            // int8_t *buffptr = new int8_t [len];
+            // uint32_t addr = reg[a1];
+            // for (size_t i = 0; i < len; i++)
+            // {
+            //     *(buffptr+i) = get_byteval_from_memory(addr++);
+            // }
+            // reg[v0] = write(reg[a0], buffptr, len);
+            // if (reg[v0]==-1)
+            //     signal_exception("Write fail");
             break;
         }
         case 16:
@@ -2495,6 +2495,8 @@ void Simulator::simulate()
     for (size_t i = static_st_idx; i < static_end_idx; i += 4)
     {
         word_t word = get_word_from_memory(base_vm + i);
+        int32_t word_val = get_wordval_from_memory(base_vm+i);
+        cout << word_val << " ";
         for (char ch : word)
             cout << ch;
         cout << endl;

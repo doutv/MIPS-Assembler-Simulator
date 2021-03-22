@@ -2,7 +2,6 @@ PROM = simulator
 TEST_DIR = ./test
 ASM_TESTS = 1 2 3 4 5 6 7 8 9 10 11 12 a-plus-b fib memcpy-hello-world
 SIM_TESTS = a-plus-b fib memcpy-hello-world
-# SIM_TESTS = memcpy-hello-world
 
 .PHONY: all clean
 .ONESHELL:
