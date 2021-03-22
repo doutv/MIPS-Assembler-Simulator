@@ -2,7 +2,7 @@
 Yongjin, Huang 119010115
 
 # Introduction
-This project implements MIPS assembler and simulator in a single `simulator.cpp` file. The assembler and the simulator are designed separately so that each of them is supposed to work independently. 
+This project implements a MIPS assembler and simulator in a single `simulator.cpp` file. The assembler and the simulator are designed separately so that each of them is supposed to work independently. 
 # Features & Tricks
 ## Nested class
 Wrap `Scanner` and `Parser` into `Assembler` using nested class, which enhances code reusability.
@@ -24,10 +24,11 @@ class Assembler
 }
 ```
 ## Process data segment in `Assembler`
-Data segment is interpret to machine code in `Assembler` since `Simulator` should only perform simulation but not assembling.
+Data segment is interpreted to machine code in `Assembler` since `Simulator` should only perform simulation but not assembling.
 ## Hash table mapping machine code to function pointer
 Hash table `unordered_map<string, function<void(const string &)>>` can replace numerous conditional statements (`if` `else if`).  
-In its generating function `gen_opcode_to_func` , `std::bind` should be used to locate the function pointer of current `Simulator` instance. e.g.
+In its generating function `gen_opcode_to_func` , `std::bind` should be used to locate the function pointer of the current `Simulator` instance. e.g.
+
 ```cpp
 // in void Simulator::gen_opcode_to_func(unordered_map<string, function<void(const string &)>> &m)
 m.emplace("000100", bind(&Simulator::instr_beq, this, placeholders::_1));
@@ -47,7 +48,8 @@ if (opcode == R_opcode[0] || opcode == R_opcode[1])
 ```
 ## Test multiple cases with makefile
 With this `makefile`, I can compile and test multiple cases by a single command `make`.  
-Take `sim_test` for example, which tests both assembler and simulator, it will echo fail message and exit when the current case fail.
+Take `sim_test` for example, which tests both assembler and simulator, it will echo fail message and exit when the current case fails.
+
 ```makefile
 sim_test: $(PROM)
 	for t in $(SIM_TESTS); do \
@@ -70,8 +72,9 @@ sim_test: $(PROM)
 # Implementation
 There are two classes in the program: `Assembler` and `Simulator`.  
 `Assembler` takes MIPS assembly code as input and output machine code in the format of `vector<string>`.  
-`Simulator` takes the output machine code from `Assembler` and execute the simulation.  
+`Simulator` takes the output machine code from `Assembler` and executes the simulation.  
 Example usage of two classes:
+
 ```cpp
 // input stream and output stream should be passed.
 Assembler assembler;
@@ -100,16 +103,16 @@ simulator.simulate();
     * `word`
     * `half`
     * `byte`
-  * Append zero or truncate to generate fixed length (32bits) machine code
-* `void find_label();` Locate all labels in text segment and store them using hash table `unordered_map<string, uint32_t> label_to_addr` which maps label to address of the code.
+  * Append zero or truncate to generate fixed-length (32bits) machine code
+* `void find_label();` Locate all labels in the text segment and store them using hash table `unordered_map<string, uint32_t> label_to_addr` which maps label to the address of the code.
 * `void parse();` Main function of `Assembler::Parser`:
-  * Interpret each line of code in data segment into machine code
+  * Interpret each line of code in the data segment into machine code
   * Based on different types of instruction, certain interpretation methods are performed:
     * R instructions
     * I instructions
     * J instructions
     * O instructions (`syscall` only)
-  * And in each type of instructions, instructions of same format are grouped together
+  * And in each type of instructions, instructions of the same format are grouped together
     * e.g. `sll` , `srl` , `sra` are in `op rd rt shamt` so they are grouped together
   * Concat string to generate machine code
 
