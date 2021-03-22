@@ -1076,8 +1076,8 @@ public:
 
     const vector<string> &input;
     inline static vector<string> output;
-    istream &instream;
-    ostream &outstream;
+    istream &simin;
+    ostream &simout;
 
     void store_word_to_memory(word_t word, uint32_t addr);
     void store_half_to_memory(half_t half, uint32_t addr);
@@ -1095,8 +1095,8 @@ public:
     void simulate();
     static size_t addr2idx(uint32_t vm);
     static size_t idx2addr(size_t idx);
-    Simulator(vector<string> &input_, std::istream &instream_, std::ostream &outstream_)
-        : input(input_), instream(instream_), outstream(outstream_) {}
+    Simulator(vector<string> &input_, istream &simin_, ostream &simout_)
+        : input(input_), simin(simin_), simout(simout_) {}
 
     unordered_map<string, function<void(const string &)>> opcode_to_func;
     unordered_map<string, function<void(const string &)>> opcode_funct_to_func;
@@ -2033,8 +2033,8 @@ public:
         {
         case 1: // print_int
         {
-            outstream << reg[a0];
-            outstream.flush();
+            simout << reg[a0];
+            simout.flush();
             break;
         }
         case 4: // print_string
@@ -2043,18 +2043,18 @@ public:
             char ch = '\0';
             while (ch = get_byteval_from_memory(addr++), ch != '\0')
             {
-                outstream << ch;
-                outstream.flush();
+                simout << ch;
+                simout.flush();
 #ifdef DEBUG_SIM
                 cout << ch;
-                outstream.flush();
+                simout.flush();
 #endif
             }
             break;
         }
         case 5: // read_int
         {
-            instream >> reg[v0];
+            simin >> reg[v0];
             break;
         }
         case 8: // read_string
@@ -2102,24 +2102,23 @@ public:
         }
         case 10: // exit
         {
-            // outstream.flush();
             exit(0);
             break;
         }
         case 11: // print_char
         {
             char ch = reg[a0] & numeric_limits<char>::max();
-            outstream << ch;
-            outstream.flush();
+            simout << ch;
+            simout.flush();
 #ifdef DEBUG_SIM
             cout << ch;
-            outstream.flush();
+            simout.flush();
 #endif
             break;
         }
         case 12: // read_char
         {
-            reg[v0] = instream.get();
+            reg[v0] = simin.get();
             break;
         }
         case 13: // open
@@ -2148,11 +2147,11 @@ public:
         }
         case 15: // write
         {
-            // write to outstream
+            // write to simout
             uint32_t addr = reg[a1];
             for (size_t i = 0; i < reg[a2]; i++)
             {
-                outstream << get_byteval_from_memory(addr++);
+                simout << get_byteval_from_memory(addr++);
             }
             // call write()
             // size_t len = reg[a2];
@@ -2541,6 +2540,7 @@ void Simulator::store_static_data()
     }
     dynamic_end_idx = static_end_idx;
 }
+ofstream simout;
 int main(int argc, char *argv[])
 {
     if (argc == 3)
@@ -2569,32 +2569,31 @@ int main(int argc, char *argv[])
     {
         // assembler + simulator
         ifstream asmin(argv[1]);
-        ifstream filein(argv[2]);
-        ofstream fileout;
-        fileout.open(argv[3]);
+        ifstream simin(argv[2]);
+        simout.open(argv[3]);
         if (!asmin.is_open())
         {
             cout << argv[1] << " can not open" << endl;
             return 0;
         }
-        if (!filein.is_open())
+        if (!simin.is_open())
         {
             cout << argv[2] << " can not open" << endl;
             return 0;
         }
-        if (!fileout.is_open())
+        if (!simout.is_open())
         {
             cout << argv[3] << " can not open" << endl;
             return 0;
         }
         Assembler assembler;
-        Simulator simulator(assembler.output, filein, fileout);
+        Simulator simulator(assembler.output, simin, simout);
         assembler.scanner.scan(asmin);
         assembler.parser.parse();
         simulator.simulate();
         asmin.close();
-        filein.close();
-        fileout.close();
+        simin.close();
+        simout.close();
     }
     else
     {
