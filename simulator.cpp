@@ -2102,7 +2102,7 @@ public:
         }
         case 10: // exit
         {
-            throw invalid_argument("syscall 10 exit(0)");
+            signal_exception("syscall 10 exit(0)");
             break;
         }
         case 11: // print_char
@@ -2173,7 +2173,7 @@ public:
         }
         case 17:
         {
-            throw invalid_argument("syscall 17 exit(reg[a0])");
+            signal_exception("syscall 17 exit(reg[a0])");
             break;
         default:
             break;
